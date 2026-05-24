@@ -50,6 +50,10 @@ function EntryCard({ entry, onDelete }) {
     market_payment:    { label: ROZNAMCHA_TYPE_BI.market_payment,    badge: 'bg-teal-100 text-teal-700',     border: 'border-l-teal-500',   icon: '💵', amountColor: 'text-teal-700' },
     cash_ledger:       { label: ROZNAMCHA_TYPE_BI.cash_ledger,       badge: 'bg-violet-100 text-violet-700', border: 'border-l-violet-400', icon: '🤝', amountColor: 'text-violet-700' },
     cash_movement:     { label: ROZNAMCHA_TYPE_BI.cash_movement,     badge: 'bg-slate-100 text-slate-700',   border: 'border-l-slate-400',  icon: '💰', amountColor: 'text-slate-700' },
+    commission_sale:   { label: ROZNAMCHA_TYPE_BI.commission_sale,   badge: 'bg-lime-100 text-lime-700',     border: 'border-l-lime-500',   icon: '🐔', amountColor: 'text-lime-700' },
+    commission_payment:{ label: ROZNAMCHA_TYPE_BI.commission_payment,badge: 'bg-green-100 text-green-700',   border: 'border-l-green-500',  icon: '💵', amountColor: 'text-green-700' },
+    dealer_payout:     { label: ROZNAMCHA_TYPE_BI.dealer_payout,     badge: 'bg-rose-100 text-rose-700',     border: 'border-l-rose-400',   icon: '💸', amountColor: 'text-rose-700' },
+    commission_fee:    { label: ROZNAMCHA_TYPE_BI.commission_fee,    badge: 'bg-red-100 text-red-700',       border: 'border-l-red-400',    icon: '🧾', amountColor: 'text-red-700' },
   }
 
   const cfg = TYPE_CONFIG[entry._type]
@@ -143,6 +147,30 @@ function EntryCard({ entry, onDelete }) {
       detail = entry.note || ''
       amount = entry.amount || 0
       break
+    case 'commission_sale':
+      title = `${entry.commission_customers?.name || '—'}`
+      detail = [
+        entry.chicken_count ? `🐔 ${entry.chicken_count}` : '',
+        entry.weight_kg ? `${entry.weight_kg} kg` : '',
+        entry.notes || '',
+      ].filter(Boolean).join(' · ')
+      amount = entry.total_amount || 0
+      break
+    case 'commission_payment':
+      title = `${entry.commission_customers?.name || '—'}`
+      detail = entry.notes || ''
+      amount = entry.amount || 0
+      break
+    case 'dealer_payout':
+      title = `${entry.commission_dealers?.name || '—'}`
+      detail = entry.notes || ''
+      amount = entry.amount || 0
+      break
+    case 'commission_fee':
+      title = entry.title || '—'
+      detail = entry.note || ''
+      amount = entry.amount || 0
+      break
   }
 
   return (
@@ -208,6 +236,10 @@ export default function Roznamcha() {
   const loansBorrowed = entries.filter(e => e._type === 'cash_ledger' && e.type === 'borrowed')
   const cashAdjIn     = entries.filter(e => e._type === 'cash_movement' && e.source === 'manual' && e.direction === 'in')
   const cashAdjOut    = entries.filter(e => e._type === 'cash_movement' && e.source === 'manual' && e.direction === 'out')
+  const commSales     = entries.filter(e => e._type === 'commission_sale')
+  const commPays      = entries.filter(e => e._type === 'commission_payment')
+  const dealerPayouts = entries.filter(e => e._type === 'dealer_payout')
+  const commFees      = entries.filter(e => e._type === 'commission_fee')
 
   const sum = (arr, key) => arr.reduce((s, x) => s + (x[key] || 0), 0)
 
@@ -216,13 +248,16 @@ export default function Roznamcha() {
                       + sum(marketPays, 'amount')
                       + sum(loansBorrowed, 'amount')
                       + sum(cashAdjIn, 'amount')
+                      + sum(commPays, 'amount')
   const moneyOut      = sum(expenses, 'amount')
                       + sum(supplyOuts, 'amount')
                       + sum(supplierPays, 'amount')
                       + sum(loansLent, 'amount')
                       + sum(cashAdjOut, 'amount')
+                      + sum(dealerPayouts, 'amount')
+                      + sum(commFees, 'amount')
   const debtFromSales = sum(sales, 'remaining')
-  const dispatched    = sum(dispatches, 'total_amount') + sum(marketTxs, 'total_amount')
+  const dispatched    = sum(dispatches, 'total_amount') + sum(marketTxs, 'total_amount') + sum(commSales, 'total_amount')
   const stockSpent    = sum(stockBuys, 'total_cost')
   const netCash       = moneyIn - moneyOut
 
@@ -277,12 +312,12 @@ export default function Roznamcha() {
         <div className="bg-green-50 border border-green-200 rounded-xl p-3">
           <p className="text-xs font-medium text-green-700 mb-1">{t('roznamcha.moneyIn')}</p>
           <p className="text-xl font-bold text-green-700">{formatCurrency(moneyIn)}</p>
-          <p className="text-xs text-green-600 mt-0.5">{payments.length + sales.length + marketPays.length + loansBorrowed.length + cashAdjIn.length} {t('roznamcha.entries') !== 'roznamcha.entries' ? t('roznamcha.entries') : 'entries'}</p>
+          <p className="text-xs text-green-600 mt-0.5">{payments.length + sales.length + marketPays.length + loansBorrowed.length + cashAdjIn.length + commPays.length} entries</p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-xl p-3">
           <p className="text-xs font-medium text-red-700 mb-1">{t('roznamcha.moneyOut')}</p>
           <p className="text-xl font-bold text-red-700">{formatCurrency(moneyOut)}</p>
-          <p className="text-xs text-red-600 mt-0.5">{expenses.length + supplyOuts.length + supplierPays.length + loansLent.length + cashAdjOut.length} {t('roznamcha.entries') !== 'roznamcha.entries' ? t('roznamcha.entries') : 'entries'}</p>
+          <p className="text-xs text-red-600 mt-0.5">{expenses.length + supplyOuts.length + supplierPays.length + loansLent.length + cashAdjOut.length + dealerPayouts.length + commFees.length} entries</p>
         </div>
         <div className={`rounded-xl p-3 border ${debtFromSales > 0 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
           <p className={`text-xs font-medium mb-1 ${debtFromSales > 0 ? 'text-amber-700' : 'text-slate-500'}`}>{t('roznamcha.debtOut')}</p>

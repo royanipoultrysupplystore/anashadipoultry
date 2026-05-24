@@ -25,6 +25,10 @@ export function useRoznamcha(date) {
       { data: marketSellerPayments },
       { data: cashLedger },
       { data: cashMovements },
+      { data: commissionSales },
+      { data: commissionPayments },
+      { data: dealerPayouts },
+      { data: commissionFees },
     ] = await Promise.all([
       supabase.from('dispatches').select('*, farms(name, name_fa, name_ps), dispatch_items(quantity, sell_price_at_time, total_amount, products(name))').eq('dispatch_date', date).order('created_at'),
       supabase.from('payments').select('*, farms(name, name_fa, name_ps)').eq('payment_date', date).order('created_at'),
@@ -44,6 +48,11 @@ export function useRoznamcha(date) {
       supabase.from('cash_ledger').select('*').eq('transaction_date', date).order('created_at'),
       // Store cash drawer — only show MANUAL / OPENING entries (movements tied to a source row are already in the feed via that row).
       supabase.from('cash_movements').select('*').in('source', ['manual', 'opening']).eq('movement_date', date).order('created_at'),
+      // Commission module
+      supabase.from('commission_sales').select('*, commission_customers(name)').eq('sale_date', date).order('created_at'),
+      supabase.from('commission_payments').select('*, commission_customers(name)').eq('payment_date', date).order('created_at'),
+      supabase.from('commission_dealer_payments').select('*, commission_dealers(name)').eq('payment_date', date).order('created_at'),
+      supabase.from('commission_fee_expenses').select('*').eq('expense_date', date).order('created_at'),
     ])
 
     const all = [
@@ -59,6 +68,10 @@ export function useRoznamcha(date) {
       ...(marketSellerPayments  || []).map(mp => ({ ...mp, _type: 'market_payment' })),
       ...(cashLedger            || []).map(cl => ({ ...cl, _type: 'cash_ledger' })),
       ...(cashMovements         || []).map(cm => ({ ...cm, _type: 'cash_movement' })),
+      ...(commissionSales       || []).map(cs => ({ ...cs, _type: 'commission_sale' })),
+      ...(commissionPayments    || []).map(cp => ({ ...cp, _type: 'commission_payment' })),
+      ...(dealerPayouts         || []).map(dp => ({ ...dp, _type: 'dealer_payout' })),
+      ...(commissionFees        || []).map(cf => ({ ...cf, _type: 'commission_fee' })),
     ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
     setEntries(all)
@@ -143,6 +156,14 @@ export function useRoznamcha(date) {
         await supabase.from('cash_movements').delete().eq('reference_id', id)
       } else if (type === 'cash_movement') {
         await supabase.from('cash_movements').delete().eq('id', id)
+      } else if (type === 'commission_sale') {
+        await supabase.from('commission_sales').delete().eq('id', id)
+      } else if (type === 'commission_payment') {
+        await supabase.from('commission_payments').delete().eq('id', id)
+      } else if (type === 'dealer_payout') {
+        await supabase.from('commission_dealer_payments').delete().eq('id', id)
+      } else if (type === 'commission_fee') {
+        await supabase.from('commission_fee_expenses').delete().eq('id', id)
       }
       toast.success('Deleted')
       await fetch()

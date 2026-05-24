@@ -38,6 +38,10 @@ export const ROZNAMCHA_TYPE_BI = {
   market_payment:    'Market Payment / دریافت از بازار',
   cash_ledger:       'Loan / قرض',
   cash_movement:     'Cash Drawer / صندوق نقدی',
+  commission_sale:   'Commission Sale / فروش کمیشن',
+  commission_payment:'Commission Payment / تادیه کمیشن',
+  dealer_payout:     'Dealer Payout / پرداخت به دیلر',
+  commission_fee:    'Commission Fee / فیس کمیشن',
 }
 
 // Supply payment items
