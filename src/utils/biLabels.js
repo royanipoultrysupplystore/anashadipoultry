@@ -44,6 +44,12 @@ export const ROZNAMCHA_TYPE_BI = {
   commission_fee:    'Commission Fee / فیس کمیشن',
 }
 
+// Farm ownership (Anas Hadi runs own + contractor farms)
+export const FARM_OWNERSHIP_BI = {
+  own: 'Own / شخصی',
+  contractor: 'Contractor / قراردادی',
+}
+
 // Supply payment items
 export const SUPPLY_ITEM_BI = {
   Sugar:        'Sugar / شکر',

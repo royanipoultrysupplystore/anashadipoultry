@@ -8,8 +8,9 @@ import PhoneInput from '../components/common/PhoneInput'
 import { formatCurrency } from '../utils/formatCurrency'
 import { useLanguage } from '../contexts/LanguageContext'
 import { lf } from '../utils/localizedField'
+import { FARM_OWNERSHIP_BI } from '../utils/biLabels'
 
-const emptyForm = { name: '', owner_name: '', phone: '', location: '', notes: '', is_active: true, initial_chicken_count: 0, price_per_chicken: 0 }
+const emptyForm = { name: '', owner_name: '', phone: '', location: '', notes: '', is_active: true, initial_chicken_count: 0, price_per_chicken: 0, ownership: 'own' }
 
 export default function Farms({ entityKind = 'farm' }) {
   const navigate = useNavigate()
@@ -34,7 +35,7 @@ export default function Farms({ entityKind = 'farm' }) {
   const [search, setSearch] = useState('')
 
   function openAdd() { setEditItem(null); setForm(emptyForm); setModalOpen(true) }
-  function openEdit(e, farm) { e.stopPropagation(); setEditItem(farm); setForm({ ...farm }); setModalOpen(true) }
+  function openEdit(e, farm) { e.stopPropagation(); setEditItem(farm); setForm({ ...farm, ownership: farm.ownership || 'own' }); setModalOpen(true) }
 
   async function handleSubmit(ev) {
     ev.preventDefault()
@@ -46,6 +47,68 @@ export default function Farms({ entityKind = 'farm' }) {
   }
 
   const filtered = farms.filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || (f.owner_name || '').toLowerCase().includes(search.toLowerCase()))
+  const ownFarms = filtered.filter(f => (f.ownership || 'own') === 'own')
+  const contractorFarms = filtered.filter(f => f.ownership === 'contractor')
+
+  const renderCard = (farm) => (
+    <div
+      key={farm.id}
+      onClick={() => navigate(`${detailBase}/${farm.id}`)}
+      className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-[#14B8A6]/30 transition-all cursor-pointer group"
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-slate-800 group-hover:text-[#0F5257] transition-colors truncate">{lf(farm, 'name', lang)}</h3>
+          <p className="text-sm text-slate-500 truncate">{lf(farm, 'owner_name', lang) || t('farms.noOwner')}</p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={(e) => openEdit(e, farm)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+            <Edit2 size={14} />
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(farm) }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
+            <Trash2 size={14} />
+          </button>
+          <ChevronRight size={16} className="text-slate-300 group-hover:text-[#14B8A6] transition-colors" />
+        </div>
+      </div>
+
+      <div className={`rounded-xl p-3 mb-4 ${farm.total_debt > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+        <p className={`text-xs font-medium mb-0.5 ${farm.total_debt > 0 ? 'text-red-600' : 'text-green-600'}`}>
+          {farm.total_debt > 0 ? t('farms.currentDebt') : t('common.balance')}
+        </p>
+        <p className={`text-xl font-bold ${farm.total_debt > 0 ? 'text-red-700' : 'text-green-700'}`}>
+          {formatCurrency(farm.total_debt)}
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        {farm.phone && (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Phone size={13} /> {farm.phone}
+          </div>
+        )}
+        {farm.location && (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <MapPin size={13} /> {farm.location}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${farm.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+            {farm.is_active ? t('common.active') : t('common.inactive')}
+          </span>
+          {!isClient && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${(farm.ownership || 'own') === 'contractor' ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'}`}>
+              {FARM_OWNERSHIP_BI[farm.ownership || 'own']}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-slate-400 shrink-0">{formatCurrency(farm.total_profit_generated)}</span>
+      </div>
+    </div>
+  )
 
   if (loading) {
     return <div className="flex items-center justify-center h-64 text-slate-400">
@@ -71,60 +134,34 @@ export default function Farms({ entityKind = 'farm' }) {
           <Building2 size={48} className="mb-4 opacity-30" />
           <p className="text-sm">{L.none}</p>
         </div>
-      ) : (
+      ) : isClient ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(farm => (
-            <div
-              key={farm.id}
-              onClick={() => navigate(`${detailBase}/${farm.id}`)}
-              className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-[#14B8A6]/30 transition-all cursor-pointer group"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-slate-800 group-hover:text-[#0F5257] transition-colors">{lf(farm, 'name', lang)}</h3>
-                  <p className="text-sm text-slate-500">{lf(farm, 'owner_name', lang) || t('farms.noOwner')}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={(e) => openEdit(e, farm)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                    <Edit2 size={14} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(farm) }} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500">
-                    <Trash2 size={14} />
-                  </button>
-                  <ChevronRight size={16} className="text-slate-300 group-hover:text-[#14B8A6] transition-colors" />
-                </div>
+          {filtered.map(renderCard)}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {ownFarms.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-600 mb-2.5 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#0F5257]" /> Our Farms / فارم‌های شخصی
+                <span className="text-xs font-normal text-slate-400">({ownFarms.length})</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {ownFarms.map(renderCard)}
               </div>
-
-              <div className={`rounded-xl p-3 mb-4 ${farm.total_debt > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-                <p className={`text-xs font-medium mb-0.5 ${farm.total_debt > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {farm.total_debt > 0 ? t('farms.currentDebt') : t('common.balance')}
-                </p>
-                <p className={`text-xl font-bold ${farm.total_debt > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                  {formatCurrency(farm.total_debt)}
-                </p>
+            </section>
+          )}
+          {contractorFarms.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-600 mb-2.5 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Contractor Farms / فارم‌های قراردادی
+                <span className="text-xs font-normal text-slate-400">({contractorFarms.length})</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {contractorFarms.map(renderCard)}
               </div>
-
-              <div className="space-y-1.5">
-                {farm.phone && (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <Phone size={13} /> {farm.phone}
-                  </div>
-                )}
-                {farm.location && (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <MapPin size={13} /> {farm.location}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${farm.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                  {farm.is_active ? t('common.active') : t('common.inactive')}
-                </span>
-                <span className="text-xs text-slate-400">{t('farms.totalProfit')}: {formatCurrency(farm.total_profit_generated)}</span>
-              </div>
-            </div>
-          ))}
+            </section>
+          )}
         </div>
       )}
 
@@ -178,6 +215,21 @@ export default function Farms({ entityKind = 'farm' }) {
                   onChange={e => setForm(f => ({ ...f, price_per_chicken: parseFloat(e.target.value) || 0 }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30"
                 />
+              </div>
+            </div>
+          )}
+          {!isClient && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Farm type / نوع فارم</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setForm(f => ({ ...f, ownership: 'own' }))}
+                  className={`px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${form.ownership === 'own' ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                  🏠 Own / شخصی
+                </button>
+                <button type="button" onClick={() => setForm(f => ({ ...f, ownership: 'contractor' }))}
+                  className={`px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${form.ownership === 'contractor' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                  🤝 Contractor / قراردادی
+                </button>
               </div>
             </div>
           )}

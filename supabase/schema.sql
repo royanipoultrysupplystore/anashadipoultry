@@ -662,3 +662,6 @@ create index if not exists cash_movements_reference_idx on cash_movements (refer
 alter table cash_movements enable row level security;
 drop policy if exists "Allow all" on cash_movements;
 create policy "Allow all" on cash_movements for all using (true) with check (true);
+
+-- Farm ownership: own vs contractor
+alter table farms add column if not exists ownership text not null default 'own';
