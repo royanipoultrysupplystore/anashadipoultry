@@ -127,20 +127,13 @@ export function useSupplierDetail(supplierId) {
     const sellPricePerBag = parseFloat(data.sell_price_per_bag) || 0
     const commissionPerBag = parseFloat(data.commission_per_bag) || 0
 
-    let productId = null
+    // Resolve (or create) the linked meel product first — but DON'T bump its
+    // stock yet, so a failed dispatch insert can't leave orphaned stock.
+    let product = null
     if (data.product_name) {
-      const product = await findOrCreateProduct(data.product_name, pricePerBag)
-      if (product) {
-        productId = product.id
-        const productPatch = {
-          quantity: (product.quantity || 0) + quantity,
-          purchase_price: pricePerBag,
-        }
-        // Only bump product-level sell price if a sell price was provided
-        if (sellPricePerBag > 0) productPatch.sell_price = sellPricePerBag
-        await supabase.from('products').update(productPatch).eq('id', product.id)
-      }
+      product = await findOrCreateProduct(data.product_name, pricePerBag)
     }
+    const productId = product?.id || null
 
     const { error } = await supabase.from('supplier_dispatches').insert([{
       supplier_id: supplierId,
@@ -159,6 +152,13 @@ export function useSupplierDetail(supplierId) {
       notes: data.notes || null,
     }])
     if (error) { toast.error(error.message); return false }
+
+    // Insert succeeded — now it's safe to add the received bags to product stock.
+    if (product) {
+      const productPatch = { quantity: (product.quantity || 0) + quantity, purchase_price: pricePerBag }
+      if (sellPricePerBag > 0) productPatch.sell_price = sellPricePerBag
+      await supabase.from('products').update(productPatch).eq('id', product.id)
+    }
 
     toast.success(t('suppliers.dispatchRecorded'))
     await fetch()
