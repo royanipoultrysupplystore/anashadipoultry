@@ -211,6 +211,9 @@ create table if not exists supplier_dispatches (
   notes text,
   created_at timestamp with time zone default now()
 );
+-- Link a dispatch_item back to the supplier_dispatch (meel bill) its bags came from,
+-- for per-supplier dispatched/remaining stock. Placed after supplier_dispatches exists.
+alter table dispatch_items add column if not exists supplier_dispatch_id uuid references supplier_dispatches(id) on delete set null;
 
 -- Supplier Payments (payments made to suppliers)
 create table if not exists supplier_payments (
