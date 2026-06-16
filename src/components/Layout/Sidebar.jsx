@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Package, Building2, Truck, CreditCard,
   Receipt, BarChart3, Settings, X,
   ShoppingCart, Users, ShoppingBag, BookOpen, Factory, Banknote, Store, Bird, Coins,
-  LogOut, UserCog, Shield, User as UserIcon, Building, Wallet
+  LogOut, UserCog, Shield, User as UserIcon, Building, Wallet, Repeat
 } from 'lucide-react'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -32,6 +32,7 @@ const SECTIONS = [
   { title: 'Money', items: [
     { to: '/store-cash', icon: Wallet, labelKey: 'nav.storeCash' },
     { to: '/cash-ledger', icon: Banknote, labelKey: 'nav.cashLedger' },
+    { to: '/sarafs', icon: Repeat, labelKey: 'nav.sarafs' },
     { to: '/payments', icon: CreditCard, labelKey: 'nav.payments' },
     { to: '/expenses', icon: Receipt, labelKey: 'nav.expenses' },
   ]},

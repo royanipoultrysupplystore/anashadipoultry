@@ -673,3 +673,23 @@ alter table farms add column if not exists ownership text not null default 'own'
 
 -- meel/feed dispatch sell price (profit tracking)
 alter table supplier_dispatches add column if not exists sell_price_per_bag numeric default 0;
+
+-- ============================================================
+-- Saraf (money exchanger) — Anas Hadi only
+-- ============================================================
+create table if not exists sarafs (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  location text,
+  notes text,
+  is_active boolean default true,
+  created_at timestamp with time zone default now()
+);
+alter table sarafs enable row level security;
+drop policy if exists "Allow all" on sarafs;
+create policy "Allow all" on sarafs for all using (true) with check (true);
+alter table payments add column if not exists saraf_id uuid references sarafs(id) on delete set null;
+alter table supplier_payments add column if not exists saraf_id uuid references sarafs(id) on delete set null;
+create index if not exists idx_payments_saraf_id on payments(saraf_id);
+create index if not exists idx_supplier_payments_saraf_id on supplier_payments(saraf_id);
