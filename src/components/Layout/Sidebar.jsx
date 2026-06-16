@@ -8,6 +8,7 @@ import {
 import { useLanguage } from '../../contexts/LanguageContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useBusinessInfo } from '../../contexts/SettingsContext'
+import { NAV_BI, SIDEBAR_SECTION_BI } from '../../utils/biLabels'
 
 const ASSOCIATE_PATHS = new Set(['/commission', '/commission-fee'])
 
@@ -90,7 +91,7 @@ export default function Sidebar({ open, onClose }) {
             <div key={si} className="px-2 py-1">
               {section.title && (
                 <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/40">
-                  {section.title}
+                  {SIDEBAR_SECTION_BI[section.title] || section.title}
                 </div>
               )}
               {section.items.map(({ to, icon: Icon, labelKey, highlight }) => (
@@ -109,7 +110,7 @@ export default function Sidebar({ open, onClose }) {
                     <>
                       <span className={`absolute inset-y-1.5 start-0 w-0.5 rounded-full bg-[#2DD4BF] transition-opacity ${isActive ? 'opacity-100' : 'opacity-0'}`} />
                       <Icon size={18} className={isActive ? 'text-[#2DD4BF] shrink-0' : 'shrink-0'} />
-                      <span className="flex-1 truncate">{t(labelKey)}</span>
+                      <span className="flex-1 truncate">{NAV_BI[labelKey] || t(labelKey)}</span>
                       {highlight && (
                         <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1.5 py-0.5 rounded-full font-bold tracking-wide">POS</span>
                       )}

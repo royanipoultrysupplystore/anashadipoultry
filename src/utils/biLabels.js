@@ -59,5 +59,49 @@ export const SUPPLY_ITEM_BI = {
   Other:        'Other / دیگر',
 }
 
+// Sidebar nav items — keyed by the labelKey used in Sidebar.jsx's SECTIONS array.
+export const NAV_BI = {
+  'nav.dashboard':      'Home / خانه',
+  'nav.roznamcha':      'Roznamcha / روزنامچه',
+  'nav.pos':            'POS / نقطه فروش',
+  'nav.inventory':      'Inventory / موجودی',
+  'nav.farms':          'Farms / فارم‌ها',
+  'nav.clients':        'Clients / مشتریان',
+  'nav.customers':      'Walk-in / مشتری عبوری',
+  'nav.dispatches':     'Dispatches / ارسالات',
+  'nav.suppliers':      'Suppliers / تأمین‌کنندگان',
+  'nav.supplyPayments': 'Supply Pay / پرداخت تدارکات',
+  'nav.storeCash':      'Store Cash / صندوق نقدی',
+  'nav.cashLedger':     'Cash Ledger / دفتر نقدی',
+  'nav.sarafs':         'Saraf / صراف',
+  'nav.payments':       'Payments / پرداخت‌ها',
+  'nav.expenses':       'Expenses / مصارف',
+  'nav.market':         'Market / بازار',
+  'nav.commission':     'Commission / کمیشن',
+  'nav.commissionFee':  'Commission Fee / فیس کمیشن',
+  'nav.reports':        'Reports / گزارش‌ها',
+  'nav.users':          'Users / کاربران',
+  'nav.settings':       'Settings / تنظیمات',
+}
+
+// Sidebar section headers — keyed by the title string used in Sidebar.jsx.
+export const SIDEBAR_SECTION_BI = {
+  Sales:     'Sales / فروشات',
+  Suppliers: 'Suppliers / تأمین‌کنندگان',
+  Money:     'Money / پول',
+  Market:    'Market / بازار',
+  System:    'System / سیستم',
+}
+
+// Roznamcha quick-entry tile labels (the modal's six type buttons).
+export const QUICK_ENTRY_TYPE_BI = {
+  dispatch: 'Dispatch / ارسال',
+  bill:     'Meel Bill / بل دانه',
+  payment:  'Payment IN / پرداخت',
+  expense:  'Expense / مصرف',
+  cash:     'Cash Ledger / دفتر قرض',
+  stock:    'Stock In / موجودی',
+}
+
 // Convenience: looks up a key in a map and falls back to the raw key if no bilingual entry exists.
 export const bi = (map, key) => (key && map[key]) || key || ''

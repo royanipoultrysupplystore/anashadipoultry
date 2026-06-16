@@ -18,12 +18,12 @@ import { todayStr } from '../../utils/dateHelpers'
 import { formatCurrency } from '../../utils/formatCurrency'
 
 const TYPES = [
-  { key: 'dispatch', icon: '🚚', label: 'Dispatch',   sub: 'Send items to a farm / client' },
-  { key: 'bill',     icon: '📋', label: 'Meel Bill',  sub: 'Write a Dana bill via a meel supplier' },
-  { key: 'payment',  icon: '💵', label: 'Payment IN', sub: 'Money received from farm / client' },
-  { key: 'expense',  icon: '🧾', label: 'Expense',    sub: 'Money paid out for shop expenses' },
-  { key: 'cash',     icon: '🤝', label: 'Cash Ledger',sub: 'Lend / borrow money to / from a person' },
-  { key: 'stock',    icon: '📦', label: 'Stock In',   sub: 'Restock medicine or feed (opens Inventory)' },
+  { key: 'dispatch', icon: '🚚', label: 'Dispatch / ارسال',   sub: 'Send items to a farm / client' },
+  { key: 'bill',     icon: '📋', label: 'Meel Bill / بل دانه', sub: 'Write a Dana bill via a meel supplier' },
+  { key: 'payment',  icon: '💵', label: 'Payment IN / پرداخت', sub: 'Money received from farm / client' },
+  { key: 'expense',  icon: '🧾', label: 'Expense / مصرف',     sub: 'Money paid out for shop expenses' },
+  { key: 'cash',     icon: '🤝', label: 'Cash Ledger / دفتر قرض', sub: 'Lend / borrow money to / from a person' },
+  { key: 'stock',    icon: '📦', label: 'Stock In / موجودی',  sub: 'Restock medicine or feed (opens Inventory)' },
 ]
 
 const EXPENSE_CATS = ['fuel', 'salary', 'rent', 'maintenance', 'utilities', 'other']
