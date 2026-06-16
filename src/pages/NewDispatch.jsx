@@ -224,6 +224,8 @@ export default function NewDispatch() {
   const totalAmount = items.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (parseFloat(i.quantity) || 0), 0)
   const totalProfit = items.reduce((s, i) => s + ((parseFloat(i.sell_price) || 0) - (parseFloat(i.purchase_price) || 0)) * (parseFloat(i.quantity) || 0), 0)
   const totalCost = items.reduce((s, i) => s + (parseFloat(i.purchase_price) || 0) * (parseFloat(i.quantity) || 0), 0)
+  // Pure meel (broker) dispatch — show clean broker columns and hide profit.
+  const brokerMode = items.length > 0 && items.every(i => i.is_meel)
   const paidAmount = parseFloat(amountPaidNow) || 0
   const remainingDebt = Math.max(0, totalAmount - paidAmount)
 
@@ -559,13 +561,25 @@ export default function NewDispatch() {
             </div>
           ) : (
             <div className="space-y-2 overflow-x-auto">
+              {(() => { return null })()}
               <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wide px-2 min-w-[640px]">
                 <div className="col-span-3">{t('dispatches.product')}</div>
-                <div className="col-span-2">{t('dispatches.batchNo')}</div>
-                <div className="col-span-1">{t('dispatches.quantity')}</div>
-                <div className="col-span-2">{t('dispatches.buyPrice')}</div>
-                <div className="col-span-2">{t('dispatches.sellPriceAFN')}</div>
-                <div className="col-span-1">{t('dispatches.profit')}</div>
+                {brokerMode ? (
+                  <>
+                    <div className="col-span-3">Bill #</div>
+                    <div className="col-span-2">{t('dispatches.quantity')}</div>
+                    <div className="col-span-2">Price / bag</div>
+                    <div className="col-span-1 text-end">{t('common.total')}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="col-span-2">{t('dispatches.batchNo')}</div>
+                    <div className="col-span-1">{t('dispatches.quantity')}</div>
+                    <div className="col-span-2">{t('dispatches.buyPrice')}</div>
+                    <div className="col-span-2">{t('dispatches.sellPriceAFN')}</div>
+                    <div className="col-span-1">{t('dispatches.profit')}</div>
+                  </>
+                )}
                 <div className="col-span-1"></div>
               </div>
               {items.map((item, idx) => (
@@ -592,22 +606,19 @@ export default function NewDispatch() {
                       </div>
                     )}
                   </div>
-                  <div className="col-span-2">
-                    <input type="text" value={item.batch_number}
-                      onChange={e => updateItem(idx, 'batch_number', e.target.value)}
-                      placeholder={item.is_new_bill ? 'Bill # *' : t('dispatches.batchNo')}
-                      className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 ${item.is_new_bill && !item.batch_number ? 'border-red-300 bg-red-50' : 'border-slate-200'}`} />
-                  </div>
-                  <div className="col-span-1">
-                    <input type="number" min="0.01" step="0.01" value={item.quantity}
-                      onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                      className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
-                  </div>
-                  {item.is_new_bill ? (
-                    // Broker row: ONE price per bag; buy/sell/profit are not concepts
-                    // here. Span 5 cols (was Buy 2 + Sell 2 + Profit 1) for the price input.
+                  {brokerMode ? (
                     <>
-                      <div className="col-span-2"></div>
+                      <div className="col-span-3">
+                        <input type="text" value={item.batch_number}
+                          onChange={e => updateItem(idx, 'batch_number', e.target.value)}
+                          placeholder="Bill # *"
+                          className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 ${item.is_new_bill && !item.batch_number ? 'border-red-300 bg-red-50' : 'border-slate-200'}`} />
+                      </div>
+                      <div className="col-span-2">
+                        <input type="number" min="0.01" step="0.01" value={item.quantity}
+                          onChange={e => updateItem(idx, 'quantity', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                      </div>
                       <div className="col-span-2">
                         <input type="number" min="0" step="0.01" value={item.sell_price}
                           onChange={e => {
@@ -615,14 +626,25 @@ export default function NewDispatch() {
                             updateItem(idx, 'purchase_price', e.target.value)
                           }}
                           placeholder="Price/bag *"
-                          className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 ${(parseFloat(item.sell_price) || 0) <= 0 ? 'border-red-300 bg-red-50' : 'border-slate-200'}`} />
+                          className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 ${item.is_new_bill && (parseFloat(item.sell_price) || 0) <= 0 ? 'border-red-300 bg-red-50' : 'border-slate-200'}`} />
                       </div>
-                      <div className="col-span-1 text-xs font-semibold text-[#0F5257] text-end pe-2">
+                      <div className="col-span-1 text-sm font-bold text-[#0F5257] text-end pe-2">
                         {formatCurrency((parseFloat(item.sell_price) || 0) * (parseFloat(item.quantity) || 0))}
                       </div>
                     </>
                   ) : (
                     <>
+                      <div className="col-span-2">
+                        <input type="text" value={item.batch_number}
+                          onChange={e => updateItem(idx, 'batch_number', e.target.value)}
+                          placeholder={t('dispatches.batchNo')}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                      </div>
+                      <div className="col-span-1">
+                        <input type="number" min="0.01" step="0.01" value={item.quantity}
+                          onChange={e => updateItem(idx, 'quantity', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                      </div>
                       <div className="col-span-2">
                         <input type="number" min="0" step="0.01" value={item.purchase_price}
                           onChange={e => updateItem(idx, 'purchase_price', e.target.value)}
@@ -653,7 +675,9 @@ export default function NewDispatch() {
               <span className="text-slate-600">{items.length} {t('dispatches.items')}</span>
               <div className="text-end">
                 <div className="text-slate-600">{t('common.total')}: <span className="font-bold text-[#0F5257]">{formatCurrency(totalAmount)}</span></div>
-                <div className="text-green-600 text-xs">{t('common.profit')}: {formatCurrency(totalProfit)}</div>
+                {!brokerMode && (
+                  <div className="text-green-600 text-xs">{t('common.profit')}: {formatCurrency(totalProfit)}</div>
+                )}
               </div>
             </div>
           )}
