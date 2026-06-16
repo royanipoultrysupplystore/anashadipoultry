@@ -9,7 +9,13 @@ export function toInputDate(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return ''
-  return d.toISOString().split('T')[0]
+  // Use LOCAL date parts — toISOString() returns UTC, which shifts the day
+  // by one for any user east of London past local midnight (and similarly
+  // west of London before local midnight).
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 export function isExpiringSoon(dateStr, days = 30) {
@@ -35,5 +41,12 @@ export function monthLabel(year, month) {
 }
 
 export function todayStr() {
-  return new Date().toISOString().split('T')[0]
+  // Local YYYY-MM-DD, not UTC. toISOString() returns UTC, which silently
+  // dated dispatches one day earlier for users east of London after their
+  // local midnight (e.g. Afghanistan UTC+4:30 between 00:00 and 04:30 local).
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
