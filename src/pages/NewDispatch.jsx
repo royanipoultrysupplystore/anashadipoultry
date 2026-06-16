@@ -5,7 +5,9 @@ import { useDispatches } from '../hooks/useDispatches'
 import { useFarms } from '../hooks/useFarms'
 import { useInventory } from '../hooks/useInventory'
 import { useMeelBills } from '../hooks/useMeelBills'
+import { useSuppliers } from '../hooks/useSuppliers'
 import { usePayments } from '../hooks/usePayments'
+import { supabase } from '../config/supabase'
 import { useBarcodeListener } from '../components/common/BarcodeScanner'
 import BarcodeScannerModal from '../components/common/BarcodeScanner'
 import WhatsAppPromptDialog from '../components/common/WhatsAppPromptDialog'
@@ -25,6 +27,7 @@ export default function NewDispatch() {
   const { products } = useInventory()
   const { createDispatch } = useDispatches()
   const { meelBills } = useMeelBills()
+  const { suppliers } = useSuppliers()
 
   const [step, setStep] = useState(1)
   const [farmId, setFarmId] = useState(searchParams.get('farm') || '')
@@ -120,8 +123,28 @@ export default function NewDispatch() {
     for (const g of map.values()) {
       g.bills.sort((a, b) => (a.dispatch_date || '').localeCompare(b.dispatch_date || ''))
     }
-    return [...map.values()].filter(g => g.total_available > 0)
-  }, [meelBills])
+    const withStock = [...map.values()].filter(g => g.total_available > 0)
+
+    // Anas Hadi is a broker — Dana never sits in our inventory. So ALSO surface
+    // every Meel supplier that has NO bills with stock so the user can "write a
+    // new bill" to them on the fly. These cards are flagged is_new_bill: true.
+    const haveStock = new Set(withStock.map(g => g.supplier_id))
+    const newBillCards = suppliers
+      .filter(s => (s.type || 'meel') === 'meel' && !haveStock.has(s.id))
+      .map(s => ({
+        product_id: null, // will be resolved/created on save
+        product_name: 'Feed (Dana)',
+        supplier_id: s.id,
+        supplier_name: s.company_name,
+        total_available: Infinity,
+        latest_sell_price: 0,
+        latest_buy_price: 0,
+        latest_date: '',
+        bills: [],
+        is_new_bill: true,
+      }))
+    return [...withStock, ...newBillCards]
+  }, [meelBills, suppliers])
 
   const filteredFeedSuppliers = feedSuppliers.filter(s =>
     !searchTerm ||
@@ -130,24 +153,25 @@ export default function NewDispatch() {
   )
 
   function addSupplierLine(s) {
-    if (items.find(i => i.is_supplier && i.product_id === s.product_id && i.supplier_id === s.supplier_id)) {
+    if (items.find(i => i.is_supplier && i.supplier_id === s.supplier_id && !!i.is_new_bill === !!s.is_new_bill)) {
       toast(t('inventory.productFound') + ': ' + s.product_name + ' (' + s.supplier_name + ')')
       return
     }
     setItems(prev => [...prev, {
-      product_id: s.product_id,
+      product_id: s.product_id, // null for new-bill lines; resolved on save
       name: s.product_name,
       unit: 'bag',
-      batch_number: '',
+      batch_number: '', // user types the bill number here (required for new-bill mode)
       purchase_price: s.latest_buy_price,
       sell_price: s.latest_sell_price || s.latest_buy_price,
       quantity: 1,
-      available: s.total_available,
+      available: s.total_available, // Infinity for new-bill mode
       is_meel: true,
       is_supplier: true,
+      is_new_bill: !!s.is_new_bill,
       supplier_id: s.supplier_id,
       supplier_name: s.supplier_name,
-      _bills: s.bills, // FIFO-ordered, used only on save for allocation
+      _bills: s.bills,
     }])
     setSearchTerm('')
   }
@@ -209,14 +233,58 @@ export default function NewDispatch() {
     for (const item of items) {
       if (parseFloat(item.quantity) <= 0) { toast.error(`${t('pos.invalidQty')}: ${item.name}`); return }
       if (parseFloat(item.quantity) > item.available) { toast.error(`${t('pos.notEnoughStock')}: ${item.name}`); return }
+      if (item.is_new_bill && !(item.batch_number || '').trim()) {
+        toast.error(`Bill # is required for ${item.supplier_name}`); return
+      }
+      if (item.is_new_bill && (parseFloat(item.sell_price) || 0) <= 0) {
+        toast.error(`Price per bag is required for ${item.supplier_name}`); return
+      }
     }
     setSaving(true)
-    // Expand supplier-level lines into per-bill items (FIFO allocation), so each
-    // dispatched bag is attributed to a real meel bill with its own purchase price.
+    // Expand supplier-level lines into per-bill items. For lines with existing
+    // bills (FIFO), each bag is attributed to a real meel bill at its own
+    // purchase price. For new-bill (broker) lines, we create the supplier_dispatch
+    // row inline so the bill exists on both sides — without touching inventory.
     const expandedItems = []
     for (const i of items) {
       const sellPrice = parseFloat(i.sell_price) || 0
-      if (i.is_supplier) {
+      if (i.is_supplier && i.is_new_bill) {
+        const qty = parseFloat(i.quantity) || 0
+        // Resolve or create the Feed (Dana) product row to satisfy dispatch_items.product_id.
+        let productId = i.product_id
+        if (!productId) {
+          const { data: existing } = await supabase.from('products').select('id').eq('type', 'meel').limit(1).maybeSingle()
+          if (existing) productId = existing.id
+          else {
+            const { data: created } = await supabase.from('products').insert([{
+              name: 'Feed (Dana)', type: 'meel', unit: 'bag', quantity: 0, purchase_price: sellPrice, sell_price: sellPrice,
+            }]).select('id').single()
+            productId = created?.id
+          }
+        }
+        if (!productId) { toast.error('Could not resolve Feed (Dana) product'); setSaving(false); return }
+        // Insert the brand-new supplier_dispatch (the bill) — no stock change.
+        const { data: newBill, error: billErr } = await supabase.from('supplier_dispatches').insert([{
+          supplier_id: i.supplier_id,
+          product_id: productId,
+          product_name: 'Feed (Dana)',
+          bill_number: i.batch_number.trim(),
+          dispatch_date: dispatchDate,
+          quantity: qty,
+          price_per_bag: sellPrice,
+          sell_price_per_bag: sellPrice,
+          total_amount: sellPrice * qty,
+        }]).select('id').single()
+        if (billErr) { toast.error(billErr.message); setSaving(false); return }
+        expandedItems.push({
+          product_id: productId,
+          batch_number: i.batch_number.trim(),
+          quantity: qty,
+          purchase_price: sellPrice,
+          sell_price: sellPrice,
+          supplier_dispatch_id: newBill.id,
+        })
+      } else if (i.is_supplier) {
         let remaining = parseFloat(i.quantity) || 0
         for (const b of (i._bills || [])) {
           if (remaining <= 0) break
@@ -397,20 +465,26 @@ export default function NewDispatch() {
           {categoryTab === 'feed' && (
             filteredFeedSuppliers.length === 0 ? (
               <div className="py-6 text-center text-slate-400 text-sm border border-dashed border-slate-200 rounded-xl">
-                {searchTerm ? `No supplier matching "${searchTerm}"` : 'No feed bills in stock — receive from a supplier first'}
+                {searchTerm ? `No supplier matching "${searchTerm}"` : 'No meel suppliers yet — add one in Suppliers first'}
               </div>
             ) : (
               <div className="border border-amber-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto">
                 {filteredFeedSuppliers.map(s => (
-                  <button key={`${s.product_id}|${s.supplier_id}`} onClick={() => addSupplierLine(s)}
+                  <button key={`${s.supplier_id}|${s.is_new_bill ? 'new' : 'stock'}`} onClick={() => addSupplierLine(s)}
                     className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-amber-50 text-sm text-start border-b border-amber-100 last:border-0">
                     <div>
                       <span className="font-medium text-slate-700">{s.product_name}</span>
                       <span className="ms-2 text-xs text-amber-700 font-medium">{s.supplier_name}</span>
                     </div>
                     <div className="text-end shrink-0 ms-4">
-                      <div className="text-xs font-semibold text-slate-600">{s.total_available} bag</div>
-                      <div className="text-xs font-medium text-[#0F5257]">{formatCurrency(s.latest_sell_price)}</div>
+                      {s.is_new_bill ? (
+                        <div className="text-xs font-semibold text-blue-600">✏️ Write new bill</div>
+                      ) : (
+                        <>
+                          <div className="text-xs font-semibold text-slate-600">{s.total_available} bag</div>
+                          <div className="text-xs font-medium text-[#0F5257]">{formatCurrency(s.latest_sell_price)}</div>
+                        </>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -521,8 +595,8 @@ export default function NewDispatch() {
                   <div className="col-span-2">
                     <input type="text" value={item.batch_number}
                       onChange={e => updateItem(idx, 'batch_number', e.target.value)}
-                      placeholder={t('dispatches.batchNo')}
-                      className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                      placeholder={item.is_new_bill ? 'Bill # *' : t('dispatches.batchNo')}
+                      className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 ${item.is_new_bill && !item.batch_number ? 'border-red-300 bg-red-50' : 'border-slate-200'}`} />
                   </div>
                   <div className="col-span-1">
                     <input type="number" min="0.01" step="0.01" value={item.quantity}
