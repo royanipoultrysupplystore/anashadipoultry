@@ -117,6 +117,22 @@ export function useSupplierDetail(supplierId) {
 
   useEffect(() => { fetch() }, [fetch])
 
+  // Returns true if some OTHER supplier_dispatches row for this supplier
+  // already uses this bill number (case-insensitive, trimmed). excludeId lets
+  // an edit ignore its own row.
+  async function isBillNumberTaken(billNumber, excludeId = null) {
+    const bn = (billNumber || '').trim()
+    if (!bn) return false
+    let q = supabase.from('supplier_dispatches')
+      .select('id, bill_number')
+      .eq('supplier_id', supplierId)
+      .ilike('bill_number', bn)
+      .limit(1)
+    if (excludeId) q = q.neq('id', excludeId)
+    const { data } = await q
+    return (data?.length || 0) > 0
+  }
+
   async function findOrCreateProduct(productName, pricePerBag) {
     const { data: results, error: findError } = await supabase
       .from('products')
@@ -155,6 +171,12 @@ export function useSupplierDetail(supplierId) {
     const pricePerBag = parseFloat(data.price_per_bag) || 0
     const sellPricePerBag = parseFloat(data.sell_price_per_bag) || 0
     const commissionPerBag = parseFloat(data.commission_per_bag) || 0
+
+    // Bill numbers must be unique per supplier.
+    if (await isBillNumberTaken(data.bill_number)) {
+      toast.error(`Bill # ${(data.bill_number || '').trim()} already exists for this supplier`)
+      return false
+    }
 
     // Resolve (or create) the linked meel product first — but DON'T bump its
     // stock yet, so a failed dispatch insert can't leave orphaned stock.
@@ -200,10 +222,16 @@ export function useSupplierDetail(supplierId) {
     const sellPricePerBag = parseFloat(data.sell_price_per_bag) || 0
     const commissionPerBag = parseFloat(data.commission_per_bag) || 0
 
+    // Bill numbers must be unique per supplier (ignoring this row).
+    if (await isBillNumberTaken(data.bill_number, id)) {
+      toast.error(`Bill # ${(data.bill_number || '').trim()} already exists for this supplier`)
+      return false
+    }
+
     // Fetch original to calculate stock difference
     const { data: original } = await supabase
       .from('supplier_dispatches')
-      .select('quantity, product_id')
+      .select('quantity, product_id, total_amount')
       .eq('id', id)
       .single()
 
@@ -220,6 +248,7 @@ export function useSupplierDetail(supplierId) {
       }
     }
 
+    const newBillTotal = quantity * pricePerBag
     const { error } = await supabase.from('supplier_dispatches').update({
       product_name: data.product_name || null,
       dispatch_date: data.dispatch_date,
@@ -227,7 +256,7 @@ export function useSupplierDetail(supplierId) {
       price_per_bag: pricePerBag,
       sell_price_per_bag: sellPricePerBag,
       weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : null,
-      total_amount: quantity * pricePerBag,
+      total_amount: newBillTotal,
       commission_per_bag: commissionPerBag,
       total_commission: quantity * commissionPerBag,
       bill_number: data.bill_number || null,
@@ -235,6 +264,46 @@ export function useSupplierDetail(supplierId) {
       notes: data.notes || null,
     }).eq('id', id)
     if (error) { toast.error(error.message); return false }
+
+    // Cross-side sync: a bill that's been dispatched to a farm has a linked
+    // dispatch_items row pointing at it. For broker bills this is 1:1, so
+    // updating the bill must also update that item + its parent dispatches
+    // row + the farm's stored debt — otherwise the farm side stays stale.
+    const { data: items } = await supabase
+      .from('dispatch_items')
+      .select('id, dispatch_id, total_amount')
+      .eq('supplier_dispatch_id', id)
+    if ((items || []).length === 1) {
+      const it = items[0]
+      const oldItemTotal = parseFloat(it.total_amount) || 0
+      const delta = newBillTotal - oldItemTotal
+      await supabase.from('dispatch_items').update({
+        quantity,
+        batch_number: data.bill_number || null,
+        purchase_price_at_time: pricePerBag,
+        sell_price_at_time: pricePerBag,
+        profit_per_item: 0,
+        total_profit: 0,
+        total_amount: newBillTotal,
+      }).eq('id', it.id)
+      if (delta !== 0) {
+        const { data: parent } = await supabase.from('dispatches').select('total_amount, farm_id').eq('id', it.dispatch_id).single()
+        if (parent) {
+          await supabase.from('dispatches').update({ total_amount: (parseFloat(parent.total_amount) || 0) + delta }).eq('id', it.dispatch_id)
+          if (parent.farm_id) {
+            const { data: farm } = await supabase.from('farms').select('total_debt').eq('id', parent.farm_id).single()
+            if (farm) {
+              await supabase.from('farms').update({
+                total_debt: Math.max(0, (parseFloat(farm.total_debt) || 0) + delta),
+              }).eq('id', parent.farm_id)
+            }
+          }
+        }
+      }
+    } else if ((items || []).length > 1) {
+      toast('Bill changed on supplier side, but it has been split across multiple farm dispatches — those rows were not auto-updated.', { icon: '⚠️', duration: 7000 })
+    }
+
     toast.success(t('suppliers.dispatchUpdated'))
     await fetch()
     return true

@@ -242,6 +242,16 @@ export default function NewDispatch() {
         toast.error(`Price per bag is required for ${item.supplier_name}`); return
       }
     }
+    // Prevent two broker lines from writing the same bill # for the same supplier in one dispatch.
+    const seen = new Set()
+    for (const item of items) {
+      if (!item.is_new_bill) continue
+      const key = `${item.supplier_id}|${(item.batch_number || '').trim().toLowerCase()}`
+      if (seen.has(key)) {
+        toast.error(`Bill # ${item.batch_number.trim()} appears twice for ${item.supplier_name}`); return
+      }
+      seen.add(key)
+    }
     setSaving(true)
     // Expand supplier-level lines into per-bill items. For lines with existing
     // bills (FIFO), each bag is attributed to a real meel bill at its own
@@ -252,6 +262,18 @@ export default function NewDispatch() {
       const sellPrice = parseFloat(i.sell_price) || 0
       if (i.is_supplier && i.is_new_bill) {
         const qty = parseFloat(i.quantity) || 0
+        // Bill # must be unique per supplier.
+        const bn = (i.batch_number || '').trim()
+        const { data: clash } = await supabase
+          .from('supplier_dispatches')
+          .select('id')
+          .eq('supplier_id', i.supplier_id)
+          .ilike('bill_number', bn)
+          .limit(1)
+        if (clash && clash.length > 0) {
+          toast.error(`Bill # ${bn} already exists for ${i.supplier_name}`)
+          setSaving(false); return
+        }
         // Resolve or create the Feed (Dana) product row to satisfy dispatch_items.product_id.
         let productId = i.product_id
         if (!productId) {
