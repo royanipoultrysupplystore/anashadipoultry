@@ -46,7 +46,11 @@ export default function Farms({ entityKind = 'farm' }) {
     setModalOpen(false)
   }
 
-  const filtered = farms.filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || (f.owner_name || '').toLowerCase().includes(search.toLowerCase()))
+  const filtered = farms
+    .filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()) || (f.owner_name || '').toLowerCase().includes(search.toLowerCase()))
+    // Highest debt first so the farms that actually need attention are at the top;
+    // farms with zero balance sink to the bottom.
+    .sort((a, b) => (b.total_debt || 0) - (a.total_debt || 0))
   const ownFarms = filtered.filter(f => (f.ownership || 'own') === 'own')
   const contractorFarms = filtered.filter(f => f.ownership === 'contractor')
 

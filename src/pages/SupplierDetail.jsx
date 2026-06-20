@@ -448,24 +448,59 @@ export default function SupplierDetail() {
                 </div>
               </div>
 
+              {/* Compact farm summary so the user can see which farms got bags
+                  from this bill without expanding. Collapses repeats from the
+                  same farm into one chip. */}
+              {hasHistory && !isExpanded && (() => {
+                const byFarm = {}
+                for (const o of outbounds) {
+                  const name = lf(o.farms, 'name', lang) || '—'
+                  byFarm[name] = (byFarm[name] || 0) + (o.quantity || 0)
+                }
+                const farms = Object.entries(byFarm)
+                const shown = farms.slice(0, 3)
+                const extra = farms.length - shown.length
+                return (
+                  <div className="px-5 pb-3 -mt-1 ms-7 flex items-center flex-wrap gap-x-3 gap-y-1 text-xs">
+                    <span className="text-slate-400 uppercase tracking-wide font-semibold">Sent to</span>
+                    {shown.map(([name, bags]) => (
+                      <span key={name} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
+                        <span className="font-medium">{name}</span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-blue-600 font-semibold">{bags} bags</span>
+                      </span>
+                    ))}
+                    {extra > 0 && (
+                      <button onClick={() => toggleExpanded(d.id)} className="text-slate-500 hover:text-[#0F5257] underline">
+                        +{extra} more
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+
               {isExpanded && hasHistory && (
                 <div className="bg-slate-50/70 px-5 pb-4">
                   <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                     Dispatched to farms ({outbounds.length})
                   </div>
                   <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto">
-                    <table className="w-full text-sm min-w-[480px]">
+                    <table className="w-full text-sm min-w-[640px]">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('common.date')}</th>
                           <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('dispatches.invoice')}</th>
+                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('suppliers.billNumber')}</th>
+                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('suppliers.danaType')}</th>
                           <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('dispatches.farm')}</th>
                           <th className="text-end px-3 py-2 text-xs font-semibold text-slate-500">{t('suppliers.bags')}</th>
                           <th className="text-end px-3 py-2 text-xs font-semibold text-slate-500">{t('common.total')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {outbounds.map((o, i) => (
+                        {outbounds.map((o, i) => {
+                          const danaOpt = DANA_OPTIONS.find(opt => opt.value === d.dana_type)
+                          return (
                           <tr key={`${d.id}-${o.dispatch_id || i}`}>
                             <td className="px-3 py-2 text-slate-600">{formatDate(o.dispatch_date)}</td>
                             <td className="px-3 py-2">
@@ -475,11 +510,23 @@ export default function SupplierDetail() {
                                 </Link>
                               ) : '—'}
                             </td>
+                            <td className="px-3 py-2">
+                              {d.bill_number ? (
+                                <span className="text-xs font-mono font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">#{d.bill_number}</span>
+                              ) : '—'}
+                            </td>
+                            <td className="px-3 py-2">
+                              {danaOpt ? (
+                                <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${danaOpt.color}`}>
+                                  {t(`suppliers.${danaOpt.labelKey}`)}
+                                </span>
+                              ) : <span className="text-slate-400">—</span>}
+                            </td>
                             <td className="px-3 py-2 font-medium text-slate-700">{lf(o.farms, 'name', lang) || '—'}</td>
                             <td className="px-3 py-2 text-end font-semibold text-blue-600">{o.quantity}</td>
                             <td className="px-3 py-2 text-end text-slate-700">{formatCurrency(o.total_amount)}</td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>

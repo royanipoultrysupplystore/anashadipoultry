@@ -23,6 +23,16 @@ import toast from 'react-hot-toast'
 
 const emptyDeathForm = { death_count: '', reason: '', death_date: todayStr(), notes: '' }
 
+// Dana-type pill styling — must match SupplierDetail.jsx so each Dana variety
+// is recognisable by colour across the app.
+const DANA_OPTIONS = [
+  { value: '4_number',  labelKey: 'dana4Number',  color: 'bg-blue-100 text-blue-700' },
+  { value: '6_number',  labelKey: 'dana6Number',  color: 'bg-cyan-100 text-cyan-700' },
+  { value: '9_number',  labelKey: 'dana9Number',  color: 'bg-green-100 text-green-700' },
+  { value: '12_number', labelKey: 'dana12Number', color: 'bg-purple-100 text-purple-700' },
+  { value: 'other',     labelKey: 'danaOther',    color: 'bg-slate-100 text-slate-600' },
+]
+
 export default function FarmDetail() {
   const { t, lang } = useLanguage()
   const { id } = useParams()
@@ -371,14 +381,22 @@ export default function FarmDetail() {
                       <div key={item.id} className="flex flex-col sm:flex-row sm:items-start sm:justify-between text-sm sm:gap-3">
                         <div className="min-w-0">
                           <p className="text-slate-700">{item.products?.name || '—'}</p>
-                          {item.supplier_dispatches && (
-                            <p className="text-xs text-amber-700 mt-0.5 flex flex-wrap items-center gap-1">
-                              <span>← {item.supplier_dispatches.suppliers?.company_name || 'meel'}</span>
-                              {item.supplier_dispatches.bill_number && (
-                                <span className="font-mono bg-blue-100 text-blue-700 px-1 rounded">Bill #{item.supplier_dispatches.bill_number}</span>
-                              )}
-                            </p>
-                          )}
+                          {item.supplier_dispatches && (() => {
+                            const danaOpt = DANA_OPTIONS.find(o => o.value === item.supplier_dispatches.dana_type)
+                            return (
+                              <p className="text-xs text-amber-700 mt-0.5 flex flex-wrap items-center gap-1">
+                                <span>← {item.supplier_dispatches.suppliers?.company_name || 'meel'}</span>
+                                {item.supplier_dispatches.bill_number && (
+                                  <span className="font-mono bg-blue-100 text-blue-700 px-1 rounded">Bill #{item.supplier_dispatches.bill_number}</span>
+                                )}
+                                {danaOpt && (
+                                  <span className={`font-semibold px-1.5 py-0.5 rounded ${danaOpt.color}`}>
+                                    {t(`suppliers.${danaOpt.labelKey}`)}
+                                  </span>
+                                )}
+                              </p>
+                            )
+                          })()}
                         </div>
                         <span className="text-slate-500 sm:shrink-0 mt-0.5 sm:mt-0">{item.quantity} × {formatCurrency(item.sell_price_at_time)} = <span className="font-medium text-slate-700">{formatCurrency(item.total_amount)}</span></span>
                       </div>
