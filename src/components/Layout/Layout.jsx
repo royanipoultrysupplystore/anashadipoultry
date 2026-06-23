@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -8,6 +8,14 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
   const { t } = useLanguage()
+  const mainRef = useRef(null)
+
+  // Snap each new page back to the top. Without this the scroll container kept
+  // the previous page's position, so opening a page could land mid-scroll with
+  // the header out of view (especially on mobile).
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [location.pathname])
 
   const getTitle = () => {
     const map = {
@@ -36,13 +44,13 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100">
+    <div className="flex h-dvh overflow-hidden bg-slate-100">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-h-0">
         <Header onMenuClick={() => setSidebarOpen(true)} title={getTitle()} />
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 min-h-0">
+        <main ref={mainRef} className="flex-1 overflow-y-auto overscroll-y-contain momentum-scroll p-4 lg:p-6 min-h-0">
           <Outlet />
         </main>
       </div>

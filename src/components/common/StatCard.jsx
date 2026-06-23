@@ -11,12 +11,12 @@ export default function StatCard({ title, value, icon: Icon, color = 'blue', sub
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer hover:border-[#14B8A6]/40' : ''}`}
+      className={`bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer hover:border-[#14B8A6]/40' : ''}`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{title}</p>
-          <p className="text-2xl font-bold text-slate-800 truncate">{value}</p>
+          <p className="text-xl sm:text-2xl font-bold text-slate-800 truncate">{value}</p>
           {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
         </div>
         {Icon && (

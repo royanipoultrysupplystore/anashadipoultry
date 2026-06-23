@@ -13,7 +13,7 @@
     width: 100%;
     max-width: 100%;
     text-align: start;
-    min-height: 100svh;
+    min-height: 100dvh;
   }
 
   /* Dari / Pashto RTL font */
@@ -59,6 +59,11 @@
 }
 
 @layer utilities {
+  /* Smooth, native-feeling momentum scrolling inside scroll containers on iOS */
+  .momentum-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;
