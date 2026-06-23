@@ -190,17 +190,15 @@ function EntryCard({ entry, onDelete, onEdit }) {
   }
 
   return (
-    <div className={`bg-white rounded-xl border border-slate-100 border-l-4 ${cfg.border} px-3 sm:px-4 py-3 flex items-start gap-2 sm:gap-4`}>
-      <div className="shrink-0 w-10 sm:w-16 text-end">
-        <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{time}</p>
-      </div>
+    <div className={`bg-white rounded-xl border border-slate-100 border-l-4 ${cfg.border} px-3 sm:px-4 py-3 flex items-start gap-2 sm:gap-3`}>
       <div className="text-lg sm:text-xl shrink-0 mt-0.5">{cfg.icon}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-0.5">
           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>{cfg.label}</span>
+          {time && <span className="text-[10px] text-slate-400">{time}</span>}
         </div>
-        <p className="text-sm font-medium text-slate-800">{title}</p>
-        {detail && <p className="text-xs text-slate-400 mt-0.5 truncate">{detail}</p>}
+        <p className="text-sm font-medium text-slate-800 wrap-break-word">{title}</p>
+        {detail && <p className="text-xs text-slate-400 mt-0.5 wrap-break-word">{detail}</p>}
         {entry._type === 'dispatch' && entry.dispatch_items?.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {entry.dispatch_items.map((item, i) => (
@@ -211,25 +209,27 @@ function EntryCard({ entry, onDelete, onEdit }) {
           </div>
         )}
       </div>
-      <div className="shrink-0 text-end">
-        <p className={`font-bold text-base ${cfg.amountColor}`}>{formatCurrency(amount)}</p>
+      <div className="shrink-0 flex flex-col items-end gap-1">
+        <p className={`font-bold text-sm sm:text-base whitespace-nowrap ${cfg.amountColor}`}>{formatCurrency(amount)}</p>
+        <div className="flex items-center gap-0.5">
+          {canEdit && (
+            <button
+              onClick={() => onEdit(entry)}
+              title={t('common.edit')}
+              className="p-1.5 rounded-lg text-slate-300 hover:bg-blue-50 hover:text-blue-500 transition-colors"
+            >
+              <Pencil size={15} />
+            </button>
+          )}
+          <button
+            onClick={() => onDelete(entry)}
+            title={t('common.delete')}
+            className="p-1.5 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
-      {canEdit && (
-        <button
-          onClick={() => onEdit(entry)}
-          title={t('common.edit')}
-          className="shrink-0 p-1.5 rounded-lg text-slate-300 hover:bg-blue-50 hover:text-blue-500 transition-colors"
-        >
-          <Pencil size={15} />
-        </button>
-      )}
-      <button
-        onClick={() => onDelete(entry)}
-        title={t('common.delete')}
-        className="shrink-0 p-1.5 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-      >
-        <Trash2 size={15} />
-      </button>
     </div>
   )
 }
