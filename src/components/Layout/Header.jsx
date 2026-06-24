@@ -1,5 +1,5 @@
 import { Menu, Wallet } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { useBusinessInfo } from '../../contexts/SettingsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -68,13 +68,15 @@ export default function Header({ onMenuClick, title }) {
           ))}
         </div>
 
-        <div className="text-end hidden sm:block">
-          <div className="text-xs font-medium text-slate-700">{businessName}</div>
-          <div className="text-xs text-slate-400">{t('common.supplyStore')}</div>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-[#0F5257] text-white flex items-center justify-center text-sm font-bold">
-          {logoLetter}
-        </div>
+        <Link to="/" aria-label="Go to Dashboard" className="flex items-center gap-1.5 sm:gap-3 hover:opacity-80 transition-opacity">
+          <div className="text-end hidden sm:block">
+            <div className="text-xs font-medium text-slate-700">{businessName}</div>
+            <div className="text-xs text-slate-400">{t('common.supplyStore')}</div>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-[#0F5257] text-white flex items-center justify-center text-sm font-bold">
+            {logoLetter}
+          </div>
+        </Link>
       </div>
     </header>
   )
