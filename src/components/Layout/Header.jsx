@@ -38,7 +38,7 @@ export default function Header({ onMenuClick, title }) {
           <NavLink
             to="/store-cash"
             title={t('storeCash.title')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-sm font-semibold transition-colors ${
               balance < 0
                 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
                 : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
@@ -56,7 +56,7 @@ export default function Header({ onMenuClick, title }) {
             <button
               key={code}
               onClick={() => setLanguage(code)}
-              className={`px-2 sm:px-3 py-1.5 transition-colors ${
+              className={`px-1.5 sm:px-3 py-1.5 transition-colors ${
                 lang === code
                   ? 'bg-[#0F5257] text-white'
                   : 'text-slate-600 hover:bg-slate-50'
