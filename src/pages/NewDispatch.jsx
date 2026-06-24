@@ -19,6 +19,16 @@ import { lf } from '../utils/localizedField'
 import { PRODUCT_CATEGORY_BI } from '../utils/biLabels'
 import toast from 'react-hot-toast'
 
+// Dana (feed) varieties — mirrors SupplierDetail.jsx / FarmDetail.jsx. The colors
+// represent the variety, not the brand, so they work the same in this theme.
+const DANA_OPTIONS = [
+  { value: '4_number',  labelKey: 'dana4Number',  color: 'bg-blue-100 text-blue-700' },
+  { value: '6_number',  labelKey: 'dana6Number',  color: 'bg-cyan-100 text-cyan-700' },
+  { value: '9_number',  labelKey: 'dana9Number',  color: 'bg-green-100 text-green-700' },
+  { value: '12_number', labelKey: 'dana12Number', color: 'bg-purple-100 text-purple-700' },
+  { value: 'other',     labelKey: 'danaOther',    color: 'bg-slate-100 text-slate-600' },
+]
+
 export default function NewDispatch() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -49,6 +59,21 @@ export default function NewDispatch() {
   const { recordPayment } = usePayments(farmId)
   const { recordIn } = useStoreCash()
   const selectedFarm = farms.find(f => f.id === farmId)
+
+  // Localized label + colored pill for a dana_type, falling back to the raw value.
+  const danaLabel = (danaType) => {
+    const opt = DANA_OPTIONS.find(o => o.value === danaType)
+    return opt ? t(`suppliers.${opt.labelKey}`) : (danaType || '')
+  }
+  const renderDanaPill = (danaType) => {
+    if (!danaType) return null
+    const opt = DANA_OPTIONS.find(o => o.value === danaType)
+    return (
+      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${opt ? opt.color : 'bg-slate-100 text-slate-600'}`}>
+        {opt ? t(`suppliers.${opt.labelKey}`) : danaType}
+      </span>
+    )
+  }
 
   function addItem(product) {
     if (items.find(i => i.product_id === product.id && !i.meel_bill_id)) {
@@ -98,13 +123,15 @@ export default function NewDispatch() {
     const map = new Map()
     for (const b of meelBills) {
       if (!b.supplier_id || !b.product_id) continue
-      const key = `${b.product_id}|${b.supplier_id}`
+      const danaType = b.dana_type || 'other'
+      const key = `${b.product_id}|${b.supplier_id}|${danaType}`
       if (!map.has(key)) {
         map.set(key, {
           product_id: b.product_id,
           product_name: b.product_name,
           supplier_id: b.supplier_id,
           supplier_name: b.supplier_name,
+          dana_type: danaType,
           total_available: 0,
           latest_sell_price: 0,
           latest_buy_price: 0,
@@ -151,12 +178,15 @@ export default function NewDispatch() {
   const filteredFeedSuppliers = feedSuppliers.filter(s =>
     !searchTerm ||
     (s.product_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.supplier_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (s.supplier_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.dana_type || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    danaLabel(s.dana_type).toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   function addSupplierLine(s) {
-    if (items.find(i => i.is_supplier && i.supplier_id === s.supplier_id && !!i.is_new_bill === !!s.is_new_bill)) {
-      toast(t('inventory.productFound') + ': ' + s.product_name + ' (' + s.supplier_name + ')')
+    if (items.find(i => i.is_supplier && i.supplier_id === s.supplier_id && !!i.is_new_bill === !!s.is_new_bill && (i.dana_type || 'other') === (s.dana_type || 'other'))) {
+      const lbl = danaLabel(s.dana_type)
+      toast(t('inventory.productFound') + ': ' + s.product_name + ' (' + s.supplier_name + (lbl ? ' · ' + lbl : '') + ')')
       return
     }
     setItems(prev => [...prev, {
@@ -173,6 +203,7 @@ export default function NewDispatch() {
       is_new_bill: !!s.is_new_bill,
       supplier_id: s.supplier_id,
       supplier_name: s.supplier_name,
+      dana_type: s.dana_type,
       _bills: s.bills,
     }])
     setSearchTerm('')
@@ -327,7 +358,8 @@ export default function NewDispatch() {
           remaining -= take
         }
         if (remaining > 0) {
-          toast.error(`${t('pos.notEnoughStock')}: ${i.name} (${i.supplier_name})`)
+          const lbl = danaLabel(i.dana_type)
+          toast.error(`${t('pos.notEnoughStock')}: ${i.name} (${i.supplier_name}${lbl ? ' · ' + lbl : ''})`)
           setSaving(false)
           return
         }
@@ -553,11 +585,12 @@ export default function NewDispatch() {
             ) : (
               <div className="border border-amber-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto">
                 {filteredFeedSuppliers.map(s => (
-                  <button key={`${s.supplier_id}|${s.is_new_bill ? 'new' : 'stock'}`} onClick={() => addSupplierLine(s)}
+                  <button key={`${s.product_id}|${s.supplier_id}|${s.dana_type}|${s.is_new_bill ? 'new' : 'stock'}`} onClick={() => addSupplierLine(s)}
                     className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-amber-50 text-sm text-start border-b border-amber-100 last:border-0">
-                    <div>
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
                       <span className="font-medium text-slate-700">{s.product_name}</span>
-                      <span className="ms-2 text-xs text-amber-700 font-medium">{s.supplier_name}</span>
+                      <span className="text-xs text-amber-700 font-medium">{s.supplier_name}</span>
+                      {renderDanaPill(s.dana_type)}
                     </div>
                     <div className="text-end shrink-0 ms-4">
                       {s.is_new_bill ? (
@@ -669,11 +702,12 @@ export default function NewDispatch() {
                   <div className="col-span-3">
                     <p className="text-sm font-medium text-slate-700 truncate">{item.name}</p>
                     {item.is_meel ? (
-                      <div className="flex flex-wrap gap-1 mt-0.5">
+                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
                         {item.batch_number && (
                           <span className="text-xs font-mono bg-blue-100 text-blue-700 px-1 rounded">#{item.batch_number}</span>
                         )}
                         <span className="text-xs text-amber-600 truncate">{item.supplier_name}</span>
+                        {renderDanaPill(item.dana_type)}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 mt-0.5">
