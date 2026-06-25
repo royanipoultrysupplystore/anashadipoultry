@@ -66,7 +66,11 @@ export default function FarmDetail() {
   const [advanceToStoreCash, setAdvanceToStoreCash] = useState(true)
   const [applyAdvanceModal, setApplyAdvanceModal] = useState(false)
   const [applyingAdvance, setApplyingAdvance] = useState(false)
-  const { recordIn } = useStoreCash()
+  const [editAdvanceModal, setEditAdvanceModal] = useState(false)
+  const [editAdvanceForm, setEditAdvanceForm] = useState({ amount: '' })
+  const [editAdvanceCash, setEditAdvanceCash] = useState(false)
+  const [editingAdvance, setEditingAdvance] = useState(false)
+  const { recordIn, recordOut } = useStoreCash()
   const [subsidy, setSubsidy] = useState('')
   const [editModal, setEditModal] = useState(false)
   const [editForm, setEditForm] = useState({})
@@ -208,6 +212,36 @@ export default function FarmDetail() {
     setApplyingAdvance(false)
   }
 
+  // Edit or remove the advance balance. `remove` pre-fills the form with 0 so the
+  // trash shortcut clears it; the user still confirms via Save.
+  function openEditAdvance(remove = false) {
+    setEditAdvanceForm({ amount: remove ? '0' : String(farm.advance_payment || 0) })
+    setEditAdvanceCash(false)
+    setEditAdvanceModal(true)
+  }
+
+  async function handleEditAdvance(e) {
+    e.preventDefault()
+    const newBal = Math.max(0, parseFloat(editAdvanceForm.amount) || 0)
+    const delta = newBal - (farm.advance_payment || 0)
+    setEditingAdvance(true)
+    const ok = await updateFarm(id, { advance_payment: newBal })
+    if (ok) {
+      // Only move store cash if the user opted in (we can't know whether a past
+      // advance was added to the drawer, so it's their call). +delta in, -delta out.
+      if (editAdvanceCash && delta !== 0) {
+        const payload = { amount: Math.abs(delta), source: 'advance', note: lf(farm, 'name', lang) || farm.name, date: todayStr() }
+        if (delta > 0) await recordIn(payload)
+        else await recordOut(payload)
+      }
+      const updated = await getFarmById(id)
+      setFarm(updated)
+      toast.success(t('farmDetail.advanceUpdated'))
+      setEditAdvanceModal(false)
+    }
+    setEditingAdvance(false)
+  }
+
   async function handleEditSave(e) {
     e.preventDefault()
     await updateFarm(id, editForm)
@@ -316,9 +350,21 @@ export default function FarmDetail() {
           <p className="text-2xl font-bold text-green-700">{formatCurrency(totalPaid)}</p>
         </div>
         <div
-          className={`rounded-xl p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow ${(farm.advance_payment || 0) > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}
+          className={`relative rounded-xl p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow ${(farm.advance_payment || 0) > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}
           onClick={() => setAdvanceModal(true)}
         >
+          {(farm.advance_payment || 0) > 0 && (
+            <div className="absolute top-2 end-2 flex items-center gap-1">
+              <button type="button" onClick={e => { e.stopPropagation(); openEditAdvance() }} title={t('farmDetail.editAdvance')}
+                className="p-1 rounded text-amber-500 hover:text-amber-700 hover:bg-amber-100">
+                <Edit2 size={13} />
+              </button>
+              <button type="button" onClick={e => { e.stopPropagation(); openEditAdvance(true) }} title={t('farmDetail.removeAdvance')}
+                className="p-1 rounded text-amber-500 hover:text-red-600 hover:bg-red-50">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          )}
           <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.advancePayment')}</p>
           <p className={`text-2xl font-bold ${(farm.advance_payment || 0) > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
             {formatCurrency(farm.advance_payment || 0)}
@@ -835,6 +881,37 @@ export default function FarmDetail() {
             </div>
           )
         })()}
+      </Modal>
+
+      {/* Edit / Remove Advance Modal */}
+      <Modal open={editAdvanceModal} onClose={() => setEditAdvanceModal(false)} title={t('farmDetail.editAdvance')}>
+        <form onSubmit={handleEditAdvance} className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+            {t('common.balance')}: <span className="font-bold">{formatCurrency(farm.advance_payment || 0)}</span>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t('farmDetail.newAdvanceBalance')}</label>
+            <input type="number" min="0" step="0.01" value={editAdvanceForm.amount}
+              onChange={e => setEditAdvanceForm({ amount: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 cursor-pointer">
+            <input type="checkbox" checked={editAdvanceCash} onChange={e => setEditAdvanceCash(e.target.checked)} className="rounded" />
+            💵 {t('farmDetail.adjustStoreCashByChange')}
+          </label>
+          <div className="flex items-center justify-between gap-3">
+            <button type="button" onClick={() => setEditAdvanceForm({ amount: '0' })}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+              <Trash2 size={14} /> {t('farmDetail.removeAdvance')}
+            </button>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setEditAdvanceModal(false)} className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
+              <button type="submit" disabled={editingAdvance} className="px-5 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-60">
+                {editingAdvance ? t('common.saving') : t('common.saveChanges')}
+              </button>
+            </div>
+          </div>
+        </form>
       </Modal>
 
       {/* Edit Farm Modal */}
