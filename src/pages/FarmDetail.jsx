@@ -64,6 +64,8 @@ export default function FarmDetail() {
   const [advanceModal, setAdvanceModal] = useState(false)
   const [advanceForm, setAdvanceForm] = useState({ amount: '', payment_date: todayStr(), notes: '' })
   const [advanceToStoreCash, setAdvanceToStoreCash] = useState(true)
+  const [applyAdvanceModal, setApplyAdvanceModal] = useState(false)
+  const [applyingAdvance, setApplyingAdvance] = useState(false)
   const { recordIn } = useStoreCash()
   const [subsidy, setSubsidy] = useState('')
   const [editModal, setEditModal] = useState(false)
@@ -181,6 +183,29 @@ export default function FarmDetail() {
       const updated = await getFarmById(id)
       setFarm(updated)
     }
+  }
+
+  // Count the farm's advance balance against its outstanding debt. Records a real
+  // payment (so the debt and history stay auditable) funded by the advance — with
+  // NO new store-cash movement, since that cash already entered when the advance
+  // was taken. Only min(advance, debt) is applied; any leftover advance remains.
+  async function handleApplyAdvanceToDebt(applied) {
+    if (!(applied > 0)) return
+    setApplyingAdvance(true)
+    const ok = await recordPayment({
+      farm_id: id,
+      amount: applied,
+      payment_date: todayStr(),
+      notes: t('farmDetail.appliedFromAdvance'),
+    })
+    if (ok) {
+      await updateFarm(id, { advance_payment: Math.max(0, (farm.advance_payment || 0) - applied) })
+      const updated = await getFarmById(id)
+      setFarm(updated)
+      toast.success(t('farmDetail.advanceApplied'))
+      setApplyAdvanceModal(false)
+    }
+    setApplyingAdvance(false)
   }
 
   async function handleEditSave(e) {
@@ -324,6 +349,11 @@ export default function FarmDetail() {
         <button onClick={() => setAdvanceModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors">
           <CreditCard size={16} /> {t('farmDetail.advancePayment')}
         </button>
+        {(farm.advance_payment || 0) > 0 && currentDebt > 0 && (
+          <button onClick={() => setApplyAdvanceModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors">
+            <CreditCard size={16} /> {t('farmDetail.applyAdvanceToDebt')}
+          </button>
+        )}
         {currentDebt > 0 && (
           <button
             onClick={() => setWaPrompt({
@@ -764,6 +794,47 @@ export default function FarmDetail() {
             <button type="submit" className="px-5 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">{t('farmDetail.addAdvance')}</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Apply Advance to Debt confirmation */}
+      <Modal open={applyAdvanceModal} onClose={() => setApplyAdvanceModal(false)} title={t('farmDetail.applyAdvanceToDebt')}>
+        {(() => {
+          const advance = farm.advance_payment || 0
+          const applied = Math.min(advance, currentDebt)
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600">{t('farmDetail.applyAdvanceConfirm')}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <p className="text-xs text-amber-700">{t('farmDetail.advancePayment')}</p>
+                  <p className="text-lg font-bold text-amber-700">{formatCurrency(advance)}</p>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                  <p className="text-xs text-red-700">{t('farms.currentDebt')}</p>
+                  <p className="text-lg font-bold text-red-700">{formatCurrency(currentDebt)}</p>
+                </div>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                <p className="text-xs text-emerald-700">{t('farmDetail.amountToApply')}</p>
+                <p className="text-2xl font-bold text-emerald-700">{formatCurrency(applied)}</p>
+                <p className="text-xs text-slate-500 mt-1" dir="ltr">
+                  {t('farms.currentDebt')}: {formatCurrency(currentDebt)} → {formatCurrency(currentDebt - applied)}
+                  {' · '}
+                  {t('farmDetail.advancePayment')}: {formatCurrency(advance)} → {formatCurrency(advance - applied)}
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button type="button" onClick={() => setApplyAdvanceModal(false)}
+                  className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
+                <button type="button" disabled={applyingAdvance || applied <= 0}
+                  onClick={() => handleApplyAdvanceToDebt(applied)}
+                  className="px-5 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60">
+                  {applyingAdvance ? t('common.saving') : t('farmDetail.applyAdvanceToDebt')}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* Edit Farm Modal */}
