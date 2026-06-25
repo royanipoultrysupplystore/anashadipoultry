@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Truck, CreditCard, Plus, Trash2, Edit2, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { useSupplierDetail } from '../hooks/useSuppliers'
 import Modal from '../components/common/Modal'
@@ -113,7 +113,6 @@ export default function SupplierDetail() {
     return sent > 0 && sent >= (d.quantity || 0)
   }).length
 
-  const navigate = useNavigate()
   const BackIcon = isRTL ? ArrowRight : ArrowLeft
 
   function openNewDispatch() {
@@ -327,7 +326,7 @@ export default function SupplierDetail() {
             <Truck size={16} /> Bills Written / بل‌های نوشته‌شده
           </h3>
           <button
-            onClick={() => navigate('/dispatches/new')}
+            onClick={openNewDispatch}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F5257] text-white rounded-lg text-sm font-medium hover:bg-[#14B8A6] transition-colors"
           >
             <Plus size={14} /> Write New Bill
@@ -593,7 +592,7 @@ export default function SupplierDetail() {
       <Modal
         open={dispatchModal}
         onClose={() => { setDispatchModal(false); setEditDispatch(null) }}
-        title={editDispatch ? t('suppliers.editDispatch') : t('suppliers.receiveDispatch')}
+        title={editDispatch ? t('suppliers.editDispatch') : t('suppliers.writeBill')}
         size="lg"
       >
         <form onSubmit={handleDispatch} className="space-y-4">
@@ -733,7 +732,7 @@ export default function SupplierDetail() {
               {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-medium bg-[#0F5257] text-white rounded-lg hover:bg-[#14B8A6] disabled:opacity-60">
-              {saving ? t('common.saving') : editDispatch ? t('common.saveChanges') : t('suppliers.receiveDispatch')}
+              {saving ? t('common.saving') : editDispatch ? t('common.saveChanges') : t('suppliers.writeBill')}
             </button>
           </div>
         </form>
