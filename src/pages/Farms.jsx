@@ -11,7 +11,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { lf } from '../utils/localizedField'
 import { FARM_OWNERSHIP_BI } from '../utils/biLabels'
 
-const emptyForm = { name: '', owner_name: '', phone: '', location: '', notes: '', is_active: true, ownership: 'own' }
+const emptyForm = { name: '', owner_name: '', phone: '', location: '', notes: '', is_active: true, ownership: 'own', opening_balance: 0 }
 
 export default function Farms({ entityKind = 'farm' }) {
   const navigate = useNavigate()
@@ -44,9 +44,11 @@ export default function Farms({ entityKind = 'farm' }) {
 
   async function handleSubmit(ev) {
     ev.preventDefault()
+    // Opening balance is an optional carry-over debt; never let it go negative.
+    const data = { ...form, opening_balance: Math.max(0, parseFloat(form.opening_balance) || 0) }
     setSaving(true)
-    if (editItem) await updateFarm(editItem.id, form)
-    else await addFarm(form)
+    if (editItem) await updateFarm(editItem.id, data)
+    else await addFarm(data)
     setSaving(false)
     setModalOpen(false)
   }
@@ -227,6 +229,16 @@ export default function Farms({ entityKind = 'farm' }) {
             <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
             <textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 resize-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              {t('farms.openingBalance')} <span className="text-slate-400 font-normal">(AFN)</span>
+            </label>
+            <input type="number" min="0" step="0.01" value={form.opening_balance ?? 0}
+              onChange={e => setForm(f => ({ ...f, opening_balance: e.target.value }))}
+              placeholder="0"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+            <p className="text-xs text-slate-400 mt-1">{t('farms.openingBalanceHelp')}</p>
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="active" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="rounded" />

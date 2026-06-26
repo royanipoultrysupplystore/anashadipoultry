@@ -34,8 +34,8 @@ export function useFarms(opts = {}) {
   }
 
   async function updateFarm(id, updates) {
-    const { name, owner_name, phone, location, notes, is_active, advance_payment, ownership } = updates
-    const patch = { name, owner_name, phone, location, notes, is_active, advance_payment, ownership }
+    const { name, owner_name, phone, location, notes, is_active, advance_payment, ownership, opening_balance } = updates
+    const patch = { name, owner_name, phone, location, notes, is_active, advance_payment, ownership, opening_balance }
     const { error } = await supabase.from('farms').update(patch).eq('id', id)
     if (error) { toast.error(error.message); return false }
     toast.success(t('farms.updated'))

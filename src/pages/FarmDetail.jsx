@@ -289,7 +289,9 @@ export default function FarmDetail() {
   const pricePerChicken = selectedBatch?.price_per_chicken || 0
   // Chicken debt is cumulative across every batch of this farm
   const chickenDebt = isClient ? 0 : totalChickenValue
-  const currentDebt = Math.max(0, totalDispatched + (isClient ? 0 : totalSupplyOut) + chickenDebt - totalPaid)
+  // Opening balance: carry-over debt from before this system; an additive constant.
+  const openingBalance = parseFloat(farm.opening_balance) || 0
+  const currentDebt = Math.max(0, openingBalance + totalDispatched + (isClient ? 0 : totalSupplyOut) + chickenDebt - totalPaid)
   const totalProfit = dispatches.flatMap(d => d.dispatch_items || []).reduce((s, i) => s + (i.total_profit || 0), 0)
   const netProfit = totalProfit - parseFloat(subsidy || 0)
 
@@ -349,6 +351,12 @@ export default function FarmDetail() {
           <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalPaid')}</p>
           <p className="text-2xl font-bold text-green-700">{formatCurrency(totalPaid)}</p>
         </div>
+        {openingBalance > 0 && (
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+            <p className="text-xs font-medium text-slate-500 mb-1">{t('farms.openingBalance')}</p>
+            <p className="text-2xl font-bold text-amber-700">{formatCurrency(openingBalance)}</p>
+          </div>
+        )}
         <div
           className={`relative rounded-xl p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow ${(farm.advance_payment || 0) > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}
           onClick={() => setAdvanceModal(true)}
