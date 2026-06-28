@@ -151,7 +151,7 @@ const translations = {
       pricePerChicken: 'Price Per Chicken (AFN)',
       chickenDebt: 'Chicken Debt',
       openingBalance: 'Opening Balance',
-      openingBalanceHelp: 'Carry-over debt from before using this system. The farm starts already owing this much. Leave at 0 for new farms.',
+      openingBalanceHelp: 'Carry-over debt from before using this system — they already owe this much. Leave at 0 for new entries.',
     },
     farmDetail: {
       overview: 'Overview',
@@ -990,7 +990,7 @@ const translations = {
       pricePerChicken: 'قیمت هر مرغ (افغانی)',
       chickenDebt: 'بدهی مرغ‌ها',
       openingBalance: 'موجوده پور (آغازین)',
-      openingBalanceHelp: 'قرض باقی‌مانده از قبل از استفاده از این سیستم. فارم از همین مقدار بدهکار شروع می‌شود. برای فارم‌های جدید روی ۰ بگذارید.',
+      openingBalanceHelp: 'قرض باقی‌مانده از قبل از استفاده از این سیستم — همین حالا این مقدار بدهکار است. برای موارد جدید روی ۰ بگذارید.',
     },
     farmDetail: {
       overview: 'خلاصه',
@@ -1830,7 +1830,7 @@ const translations = {
       pricePerChicken: 'د هر چرګ قیمت (افغاني)',
       chickenDebt: 'د چرګانو پور',
       openingBalance: 'موجوده پور (پیل)',
-      openingBalanceHelp: 'له دې سیسټم نه مخکې پاتې پور. فارم له همدې اندازې پور سره پیل کیږي. د نویو فارمونو لپاره یې پر ۰ پریږدئ.',
+      openingBalanceHelp: 'له دې سیسټم نه مخکې پاتې پور — همدا اوس دومره پوروړی دی. د نویو لپاره یې پر ۰ پریږدئ.',
     },
     farmDetail: {
       overview: 'لنډیز',
