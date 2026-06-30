@@ -155,6 +155,7 @@ const translations = {
     },
     danaBill: {
       section: 'Dana Bills',
+      totalBilled: 'Total Billed',
       write: 'Write Dana Bill',
       edit: 'Edit Dana Bill',
       none: 'No Dana bills yet.',
@@ -1015,6 +1016,7 @@ const translations = {
     },
     danaBill: {
       section: 'بل‌های دانه',
+      totalBilled: 'مجموع بل‌شده',
       write: 'نوشتن بل دانه',
       edit: 'ویرایش بل دانه',
       none: 'هنوز بل دانه‌ای ثبت نشده.',
@@ -1876,6 +1878,7 @@ const translations = {
     },
     danaBill: {
       section: 'د دانې بلونه',
+      totalBilled: 'ټول بل شوي',
       write: 'د دانې بل لیکل',
       edit: 'د دانې بل سمول',
       none: 'تر اوسه د دانې بل نشته.',

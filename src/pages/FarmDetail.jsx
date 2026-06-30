@@ -60,7 +60,8 @@ export default function FarmDetail() {
   const { bills: danaBills, totalBilled: danaBillsTotal, createDanaBill, updateDanaBill, deleteDanaBill } = useDanaBills(id, { enabled: isClient })
 
   const [farm, setFarm] = useState(null)
-  const [tab, setTab] = useState('dispatches')
+  // Clients are broker bills only (no dispatches) → open on Payments.
+  const [tab, setTab] = useState(isClient ? 'payments' : 'dispatches')
   const [batchModal, setBatchModal] = useState(false)
   const [editBatchItem, setEditBatchItem] = useState(null)
   const [batchForm, setBatchForm] = useState({ supplier_id: '', initial_chicken_count: '', price_per_chicken: '', start_date: todayStr(), notes: '' })
@@ -352,9 +353,7 @@ export default function FarmDetail() {
   const netProfit = totalProfit - parseFloat(subsidy || 0)
 
   const TABS = isClient ? [
-    { key: 'dispatches', label: `📦 ${t('farmDetail.dispatches')}` },
     { key: 'payments', label: `💳 ${t('farmDetail.payments')}` },
-    { key: 'profit', label: `📈 ${t('common.profit')}` },
   ] : [
     { key: 'dispatches', label: `📦 ${t('farmDetail.dispatches')}` },
     { key: 'payments', label: `💳 ${t('farmDetail.payments')}` },
@@ -400,8 +399,8 @@ export default function FarmDetail() {
           <p className={`text-2xl font-bold ${currentDebt > 0 ? 'text-red-700' : 'text-green-700'}`}>{formatCurrency(currentDebt)}</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalDispatched')}</p>
-          <p className="text-2xl font-bold text-slate-800">{formatCurrency(totalDispatched)}</p>
+          <p className="text-xs font-medium text-slate-500 mb-1">{isClient ? t('danaBill.totalBilled') : t('farmDetail.totalDispatched')}</p>
+          <p className="text-2xl font-bold text-slate-800">{formatCurrency(isClient ? totalDispatched + danaBillsTotal : totalDispatched)}</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
           <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalPaid')}</p>
@@ -434,10 +433,12 @@ export default function FarmDetail() {
             {formatCurrency(farm.advance_payment || 0)}
           </p>
         </div>
-        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-          <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalProfit')}</p>
-          <p className="text-2xl font-bold text-[#0F5257]">{formatCurrency(totalProfit)}</p>
-        </div>
+        {!isClient && (
+          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+            <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalProfit')}</p>
+            <p className="text-2xl font-bold text-[#0F5257]">{formatCurrency(totalProfit)}</p>
+          </div>
+        )}
         {!isClient && (
           <div className={`rounded-xl p-4 border ${chickenDebt > 0 ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-100 shadow-sm'}`}>
             <p className="text-xs font-medium text-slate-500 mb-1">🐔 {t('farms.chickenDebt')}</p>
@@ -450,9 +451,11 @@ export default function FarmDetail() {
       </div>
 
       <div className="flex flex-wrap gap-2 sm:gap-3">
-        <button onClick={() => navigate(`/dispatches/new?farm=${id}`)} className="flex items-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6] transition-colors">
-          <Truck size={16} /> {t('dispatches.newDispatch')}
-        </button>
+        {!isClient && (
+          <button onClick={() => navigate(`/dispatches/new?farm=${id}`)} className="flex items-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6] transition-colors">
+            <Truck size={16} /> {t('dispatches.newDispatch')}
+          </button>
+        )}
         <button onClick={() => setPaymentModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors">
           <CreditCard size={16} /> {t('farmDetail.addPayment')}
         </button>
