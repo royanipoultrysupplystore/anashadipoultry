@@ -412,6 +412,7 @@ export default function FarmDetail() {
             <p className="text-2xl font-bold text-amber-700">{formatCurrency(openingBalance)}</p>
           </div>
         )}
+        {!isClient && (
         <div
           className={`relative rounded-xl p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow ${(farm.advance_payment || 0) > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}
           onClick={() => setAdvanceModal(true)}
@@ -433,6 +434,7 @@ export default function FarmDetail() {
             {formatCurrency(farm.advance_payment || 0)}
           </p>
         </div>
+        )}
         {!isClient && (
           <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
             <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalProfit')}</p>
@@ -459,10 +461,12 @@ export default function FarmDetail() {
         <button onClick={() => setPaymentModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors">
           <CreditCard size={16} /> {t('farmDetail.addPayment')}
         </button>
-        <button onClick={() => setAdvanceModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors">
-          <CreditCard size={16} /> {t('farmDetail.advancePayment')}
-        </button>
-        {(farm.advance_payment || 0) > 0 && currentDebt > 0 && (
+        {!isClient && (
+          <button onClick={() => setAdvanceModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors">
+            <CreditCard size={16} /> {t('farmDetail.advancePayment')}
+          </button>
+        )}
+        {!isClient && (farm.advance_payment || 0) > 0 && currentDebt > 0 && (
           <button onClick={() => setApplyAdvanceModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors">
             <CreditCard size={16} /> {t('farmDetail.applyAdvanceToDebt')}
           </button>
