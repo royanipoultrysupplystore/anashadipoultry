@@ -28,8 +28,16 @@ const TYPES = [
 
 const EXPENSE_CATS = ['fuel', 'salary', 'rent', 'maintenance', 'utilities', 'other']
 
+const DANA_OPTIONS = [
+  { value: '4_number',  labelKey: 'dana4Number' },
+  { value: '6_number',  labelKey: 'dana6Number' },
+  { value: '9_number',  labelKey: 'dana9Number' },
+  { value: '12_number', labelKey: 'dana12Number' },
+  { value: 'other',     labelKey: 'danaOther' },
+]
+
 const emptyDisp = { farm_id: '', product_id: '', quantity: '1', sell_price: '', purchase_price: '', date: todayStr(), notes: '' }
-const emptyBill = { farm_id: '', supplier_id: '', bill_number: '', quantity: '', price_per_bag: '', date: todayStr(), notes: '' }
+const emptyBill = { farm_id: '', supplier_id: '', bill_number: '', dana_type: '9_number', quantity: '', price_per_bag: '', date: todayStr(), notes: '' }
 const emptyPay  = { farm_id: '', amount: '', date: todayStr(), notes: '' }
 const emptyExp  = { title: '', amount: '', category: 'other', date: todayStr(), notes: '' }
 const emptyCash  = { person_name: '', phone: '', amount: '', cashType: 'lent', date: todayStr(), notes: '' }
@@ -166,11 +174,10 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
           )
         }
       } else if (type === 'bill') {
-        // Broker Meel Bill — same as NewDispatch's "write new bill" path, just
-        // condensed: pick farm/client + meel + bill # + bags + price. Creates
-        // supplier_dispatches (the bill), dispatch_items (linked via
-        // supplier_dispatch_id), and the parent dispatch; updates farm.total_debt.
-        if (!billForm.farm_id) { toast.error('Pick a farm / client'); return }
+        // Broker Dana Bill (clients only). One supplier_dispatches row carrying
+        // farm_id (the client): adds to the client's debt AND the supplier's
+        // remaining (same total, no margin). No dispatch, no inventory touch.
+        if (!billForm.farm_id) { toast.error('Pick a client'); return }
         if (!billForm.supplier_id) { toast.error('Pick a Meel supplier'); return }
         const billNo = (billForm.bill_number || '').trim()
         if (!billNo) { toast.error('Bill # is required'); return }
@@ -188,48 +195,21 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
           toast.error(`Bill # ${billNo} already exists for ${sup?.company_name || 'this supplier'}`); return
         }
 
-        // Resolve or create the Feed (Dana) product row to satisfy dispatch_items.product_id.
-        let productId = null
-        const { data: existing } = await supabase.from('products').select('id').eq('type', 'meel').limit(1).maybeSingle()
-        if (existing) productId = existing.id
-        else {
-          const { data: created } = await supabase.from('products').insert([{
-            name: 'Feed (Dana)', type: 'meel', unit: 'bag', quantity: 0, purchase_price: price, sell_price: price,
-          }]).select('id').single()
-          productId = created?.id
-        }
-        if (!productId) { toast.error('Could not resolve Feed (Dana) product'); return }
-
-        const total = bags * price
-
-        // Insert the bill (supplier_dispatches row) — no stock change.
-        const { data: newBill, error: billErr } = await supabase.from('supplier_dispatches').insert([{
+        const { error: billErr } = await supabase.from('supplier_dispatches').insert([{
           supplier_id: billForm.supplier_id,
-          product_id: productId,
+          farm_id: billForm.farm_id,
           product_name: 'Feed (Dana)',
           bill_number: billNo,
+          dana_type: billForm.dana_type || null,
           dispatch_date: billForm.date,
           quantity: bags,
           price_per_bag: price,
           sell_price_per_bag: price,
-          total_amount: total,
+          total_amount: bags * price,
           notes: billForm.notes || null,
-        }]).select('id').single()
+        }])
         if (billErr) { toast.error(billErr.message); return }
-
-        // Use createDispatch so the farm side + Roznamcha entries are created
-        // through the same pipeline as a regular dispatch.
-        ok = await createDispatch(
-          { farm_id: billForm.farm_id, dispatch_date: billForm.date, total_amount: total, notes: billForm.notes || null },
-          [{
-            product_id: productId,
-            quantity: bags,
-            sell_price: price,
-            purchase_price: price,
-            batch_number: billNo,
-            supplier_dispatch_id: newBill.id,
-          }],
-        )
+        ok = true
       } else if (type === 'payment') {
         if (!payForm.farm_id) { toast.error('Pick a farm / client'); return }
         const amt = parseFloat(payForm.amount) || 0
@@ -443,21 +423,15 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
           return (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Send to *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Client / مشتری *</label>
                 <select required value={billForm.farm_id} onChange={e => setBillForm(f => ({ ...f, farm_id: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-                  <option value="">— pick farm or client —</option>
-                  {activeFarms.length > 0 && (
-                    <optgroup label="🏠 Farms / فارم‌ها">
-                      {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
-                    </optgroup>
-                  )}
-                  {activeClients.length > 0 && (
-                    <optgroup label="🏪 Clients / مشتریان">
-                      {activeClients.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
-                    </optgroup>
-                  )}
+                  <option value="">— pick a client —</option>
+                  {activeClients.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
                 </select>
+                {activeClients.length === 0 && (
+                  <p className="text-xs text-amber-700 mt-1">No clients yet — add one under Clients first.</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Meel supplier *</label>
@@ -469,6 +443,13 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                 {meelSuppliers.length === 0 && (
                   <p className="text-xs text-amber-700 mt-1">No meel suppliers yet — add one under Suppliers first.</p>
                 )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Dana Type / نوع دانه</label>
+                <select value={billForm.dana_type} onChange={e => setBillForm(f => ({ ...f, dana_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 bg-white">
+                  {DANA_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(`suppliers.${o.labelKey}`)}</option>)}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
