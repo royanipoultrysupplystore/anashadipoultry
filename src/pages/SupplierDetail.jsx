@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Truck, CreditCard, Plus, Trash2, Edit2, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Truck, CreditCard, Plus, Trash2, Edit2, ChevronDown, ChevronRight as ChevronRightIcon, FileText } from 'lucide-react'
 import { useSupplierDetail } from '../hooks/useSuppliers'
+import { useBusinessInfo } from '../contexts/SettingsContext'
+import { printDanaBill } from '../utils/printDanaBill'
 import Modal from '../components/common/Modal'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import WhatsAppPromptDialog from '../components/common/WhatsAppPromptDialog'
@@ -59,6 +61,7 @@ const emptyPayment = {
 export default function SupplierDetail() {
   const { id } = useParams()
   const { t, lang, isRTL } = useLanguage()
+  const { businessName } = useBusinessInfo()
   const {
     supplier, dispatches, payments, loading,
     totalOwed, totalPaid, remaining, totalBags, dispatchedBags, dispatchedByBill, outboundsByBill, remainingBags, totalCommission,
@@ -119,6 +122,20 @@ export default function SupplierDetail() {
     setEditDispatch(null)
     setDispatchForm({ ...emptyDispatch, dispatch_date: todayStr() })
     setDispatchModal(true)
+  }
+
+  function printBill(d) {
+    printDanaBill({
+      business_name: businessName,
+      client_name: lf(d.farms, 'name', lang) || '—',
+      supplier_name: supplier?.company_name || '—',
+      bill_number: d.bill_number,
+      dana_type: d.dana_type,
+      quantity: d.quantity,
+      price_per_bag: d.price_per_bag,
+      total_amount: d.total_amount,
+      date: formatDate(d.dispatch_date),
+    })
   }
 
   function openEditDispatch(d) {
@@ -399,6 +416,7 @@ export default function SupplierDetail() {
                     <div className="text-xs text-slate-400">{t('suppliers.billNumber')}</div>
                     <div className="font-bold text-slate-700">{d.bill_number || '—'}</div>
                     {d.product_name && <div className="text-xs text-slate-400 mt-0.5">{d.product_name}</div>}
+                    {d.farms && <div className="text-xs text-amber-600 mt-0.5 truncate">👤 {lf(d.farms, 'name', lang)}</div>}
                   </div>
                   <div>
                     <div className="text-xs text-slate-400">{t('suppliers.danaType')}</div>
@@ -438,6 +456,9 @@ export default function SupplierDetail() {
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  <button onClick={() => printBill(d)} title={t('danaBill.pdf')} className="p-1.5 text-slate-500 hover:text-[#0F5257] hover:bg-slate-100 rounded-lg">
+                    <FileText size={14} />
+                  </button>
                   <button onClick={() => openEditDispatch(d)} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg">
                     <Edit2 size={14} />
                   </button>

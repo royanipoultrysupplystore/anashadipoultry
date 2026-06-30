@@ -27,26 +27,29 @@ export function useEntityDebts(kind) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [disp, pay, supply, batches, farmRows] = await Promise.all([
+    const [disp, pay, supply, batches, farmRows, danaBills] = await Promise.all([
       fetchAllRows('dispatches', 'farm_id, total_amount'),
       fetchAllRows('payments', 'farm_id, amount'),
       isClient ? Promise.resolve([]) : fetchAllRows('supply_payments', 'farm_id, amount'),
       isClient ? Promise.resolve([]) : fetchAllRows('farm_batches', 'farm_id, initial_chicken_count, price_per_chicken'),
       fetchAllRows('farms', 'id, opening_balance'),
+      fetchAllRows('supplier_dispatches', 'farm_id, total_amount'),
     ])
 
     const acc = {}
-    const slot = (id) => (acc[id] ||= { dispatched: 0, paid: 0, supply: 0, chicken: 0, opening: 0 })
+    const slot = (id) => (acc[id] ||= { dispatched: 0, paid: 0, supply: 0, chicken: 0, opening: 0, bills: 0 })
     // Opening balance: carry-over debt from before this system, an additive constant.
     for (const f of farmRows) if (f.id) slot(f.id).opening += parseFloat(f.opening_balance) || 0
     for (const d of disp) if (d.farm_id) slot(d.farm_id).dispatched += d.total_amount || 0
     for (const p of pay) if (p.farm_id) slot(p.farm_id).paid += p.amount || 0
     for (const s of supply) if (s.farm_id) slot(s.farm_id).supply += s.amount || 0
     for (const b of batches) if (b.farm_id) slot(b.farm_id).chicken += (b.initial_chicken_count || 0) * (b.price_per_chicken || 0)
+    // Dana bills written from the client account (supplier_dispatches w/ farm_id).
+    for (const b of danaBills) if (b.farm_id) slot(b.farm_id).bills += parseFloat(b.total_amount) || 0
 
     const out = {}
     for (const [id, v] of Object.entries(acc)) {
-      out[id] = Math.max(0, v.opening + v.dispatched + v.supply + v.chicken - v.paid)
+      out[id] = Math.max(0, v.opening + v.dispatched + v.supply + v.chicken + v.bills - v.paid)
     }
     setDebts(out)
     setLoading(false)

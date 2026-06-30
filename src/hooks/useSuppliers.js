@@ -63,7 +63,7 @@ export function useSupplierDetail(supplierId) {
     setLoading(true)
     const [supplierRes, dispatchRes, paymentRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-      supabase.from('supplier_dispatches').select('*').eq('supplier_id', supplierId).order('dispatch_date', { ascending: false }),
+      supabase.from('supplier_dispatches').select('*, farms(name, name_fa, name_ps)').eq('supplier_id', supplierId).order('dispatch_date', { ascending: false }),
       supabase.from('supplier_payments').select('*').eq('supplier_id', supplierId).order('payment_date', { ascending: false }),
     ])
     if (supplierRes.error) { toast.error(t('suppliers.loadFailed')); setLoading(false); return }

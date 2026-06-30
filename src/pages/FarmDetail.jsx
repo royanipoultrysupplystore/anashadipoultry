@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Phone, MapPin, Truck, CreditCard, Edit2, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, Truck, CreditCard, Edit2, Plus, Trash2, FileText } from 'lucide-react'
 import { useFarms } from '../hooks/useFarms'
 import { useDispatches } from '../hooks/useDispatches'
 import { usePayments } from '../hooks/usePayments'
@@ -9,6 +9,9 @@ import { useChickenDeaths } from '../hooks/useChickenDeaths'
 import { useMarketTransactions } from '../hooks/useMarketTransactions'
 import { useFarmBatches } from '../hooks/useFarmBatches'
 import { useSuppliers } from '../hooks/useSuppliers'
+import { useDanaBills } from '../hooks/useDanaBills'
+import { useBusinessInfo } from '../contexts/SettingsContext'
+import { printDanaBill } from '../utils/printDanaBill'
 import Modal from '../components/common/Modal'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import PhoneInput from '../components/common/PhoneInput'
@@ -22,6 +25,7 @@ import { SUPPLY_ITEM_BI } from '../utils/biLabels'
 import toast from 'react-hot-toast'
 
 const emptyDeathForm = { death_count: '', reason: '', death_date: todayStr(), notes: '' }
+const emptyDanaBill = { supplier_id: '', bill_number: '', dana_type: '9_number', quantity: '', price_per_bag: '', dispatch_date: todayStr(), notes: '' }
 
 // Dana-type pill styling — must match SupplierDetail.jsx so each Dana variety
 // is recognisable by colour across the app.
@@ -50,6 +54,10 @@ export default function FarmDetail() {
   const { transactions: marketTransactions, loading: mtLoading } = useMarketTransactions({ farmId: id })
   const { suppliers: allSuppliers } = useSuppliers()
   const chozaSuppliers = allSuppliers.filter(s => s.type === 'choza')
+  const meelSuppliers = allSuppliers.filter(s => (s.type || 'meel') === 'meel')
+  const { businessName } = useBusinessInfo()
+  // Dana bills written from this client account (clients only).
+  const { bills: danaBills, totalBilled: danaBillsTotal, createDanaBill, updateDanaBill, deleteDanaBill } = useDanaBills(id, { enabled: isClient })
 
   const [farm, setFarm] = useState(null)
   const [tab, setTab] = useState('dispatches')
@@ -70,6 +78,11 @@ export default function FarmDetail() {
   const [editAdvanceForm, setEditAdvanceForm] = useState({ amount: '' })
   const [editAdvanceCash, setEditAdvanceCash] = useState(false)
   const [editingAdvance, setEditingAdvance] = useState(false)
+  const [danaBillModal, setDanaBillModal] = useState(false)
+  const [editDanaBill, setEditDanaBill] = useState(null)
+  const [danaBillForm, setDanaBillForm] = useState(emptyDanaBill)
+  const [savingDanaBill, setSavingDanaBill] = useState(false)
+  const [deleteDanaTarget, setDeleteDanaTarget] = useState(null)
   const { recordIn, recordOut } = useStoreCash()
   const [subsidy, setSubsidy] = useState('')
   const [editModal, setEditModal] = useState(false)
@@ -242,6 +255,49 @@ export default function FarmDetail() {
     setEditingAdvance(false)
   }
 
+  function openNewDanaBill() {
+    setEditDanaBill(null)
+    setDanaBillForm({ ...emptyDanaBill, dispatch_date: todayStr() })
+    setDanaBillModal(true)
+  }
+  function openEditDanaBill(b) {
+    setEditDanaBill(b)
+    setDanaBillForm({
+      supplier_id: b.supplier_id || '',
+      bill_number: b.bill_number || '',
+      dana_type: b.dana_type || '9_number',
+      quantity: String(b.quantity ?? ''),
+      price_per_bag: String(b.price_per_bag ?? ''),
+      dispatch_date: b.dispatch_date || todayStr(),
+      notes: b.notes || '',
+    })
+    setDanaBillModal(true)
+  }
+  async function handleDanaBillSubmit(e) {
+    e.preventDefault()
+    if (!danaBillForm.supplier_id) { toast.error(t('danaBill.supplierRequired')); return }
+    if (!(parseFloat(danaBillForm.quantity) > 0)) { toast.error(t('danaBill.bagsRequired')); return }
+    setSavingDanaBill(true)
+    const ok = editDanaBill
+      ? await updateDanaBill(editDanaBill.id, danaBillForm)
+      : await createDanaBill(danaBillForm)
+    setSavingDanaBill(false)
+    if (ok) { setDanaBillModal(false); setEditDanaBill(null) }
+  }
+  function printBill(b) {
+    printDanaBill({
+      business_name: businessName,
+      client_name: lf(farm, 'name', lang) || farm.name,
+      supplier_name: b.suppliers?.company_name || meelSuppliers.find(s => s.id === b.supplier_id)?.company_name || '—',
+      bill_number: b.bill_number,
+      dana_type: b.dana_type,
+      quantity: b.quantity,
+      price_per_bag: b.price_per_bag,
+      total_amount: b.total_amount,
+      date: formatDate(b.dispatch_date),
+    })
+  }
+
   async function handleEditSave(e) {
     e.preventDefault()
     await updateFarm(id, editForm)
@@ -291,7 +347,7 @@ export default function FarmDetail() {
   const chickenDebt = isClient ? 0 : totalChickenValue
   // Opening balance: carry-over debt from before this system; an additive constant.
   const openingBalance = parseFloat(farm.opening_balance) || 0
-  const currentDebt = Math.max(0, openingBalance + totalDispatched + (isClient ? 0 : totalSupplyOut) + chickenDebt - totalPaid)
+  const currentDebt = Math.max(0, openingBalance + totalDispatched + (isClient ? 0 : totalSupplyOut) + chickenDebt + danaBillsTotal - totalPaid)
   const totalProfit = dispatches.flatMap(d => d.dispatch_items || []).reduce((s, i) => s + (i.total_profit || 0), 0)
   const netProfit = totalProfit - parseFloat(subsidy || 0)
 
@@ -425,6 +481,46 @@ export default function FarmDetail() {
           </button>
         )}
       </div>
+
+      {/* Dana Bills — clients write a meel bill that adds to their debt + the supplier's balance */}
+      {isClient && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-700 flex items-center gap-2">🌾 {t('danaBill.section')}</h3>
+            <button onClick={openNewDanaBill}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors">
+              <Plus size={14} /> {t('danaBill.write')}
+            </button>
+          </div>
+          {danaBills.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">{t('danaBill.none')}</p>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {danaBills.map(b => {
+                const opt = DANA_OPTIONS.find(o => o.value === b.dana_type)
+                return (
+                  <div key={b.id} className="px-5 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-slate-700 truncate">{b.suppliers?.company_name || '—'}</span>
+                        {b.bill_number && <span className="text-xs font-mono bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">#{b.bill_number}</span>}
+                        {b.dana_type && <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${opt ? opt.color : 'bg-slate-100 text-slate-600'}`}>{opt ? t(`suppliers.${opt.labelKey}`) : b.dana_type}</span>}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">{b.quantity} {t('danaBill.bags')} × {formatCurrency(b.price_per_bag)} · {formatDate(b.dispatch_date)}</p>
+                    </div>
+                    <p className="font-bold text-[#0F5257] shrink-0">{formatCurrency(b.total_amount)}</p>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button onClick={() => printBill(b)} title={t('danaBill.pdf')} className="p-1.5 rounded-lg text-slate-400 hover:text-[#0F5257] hover:bg-slate-100"><FileText size={15} /></button>
+                      <button onClick={() => openEditDanaBill(b)} title={t('common.edit')} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50"><Edit2 size={14} /></button>
+                      <button onClick={() => setDeleteDanaTarget(b)} title={t('common.delete')} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-1 bg-white rounded-xl p-1 border border-slate-100 shadow-sm w-fit flex-wrap">
         {TABS.map(tabItem => (
@@ -1034,6 +1130,77 @@ export default function FarmDetail() {
         templateKey={waPrompt?.templateKey}
         variables={waPrompt?.variables}
         recipient={waPrompt?.recipient}
+      />
+
+      {/* Dana Bill Modal (clients) */}
+      <Modal open={danaBillModal} onClose={() => { setDanaBillModal(false); setEditDanaBill(null) }} title={editDanaBill ? t('danaBill.edit') : t('danaBill.write')}>
+        <form onSubmit={handleDanaBillSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t('danaBill.supplier')} *</label>
+            <select required value={danaBillForm.supplier_id} onChange={e => setDanaBillForm(f => ({ ...f, supplier_id: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white">
+              <option value="">{t('danaBill.chooseSupplier')}</option>
+              {meelSuppliers.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+            </select>
+            {meelSuppliers.length === 0 && <p className="text-xs text-amber-600 mt-1">{t('danaBill.noSuppliers')}</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('danaBill.billNumber')}</label>
+              <input value={danaBillForm.bill_number} onChange={e => setDanaBillForm(f => ({ ...f, bill_number: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('danaBill.danaType')}</label>
+              <select value={danaBillForm.dana_type} onChange={e => setDanaBillForm(f => ({ ...f, dana_type: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white">
+                {DANA_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(`suppliers.${o.labelKey}`)}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('danaBill.bags')} *</label>
+              <input required type="number" min="0.01" step="0.01" value={danaBillForm.quantity} onChange={e => setDanaBillForm(f => ({ ...f, quantity: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('danaBill.pricePerBag')}</label>
+              <input type="number" min="0" step="0.01" value={danaBillForm.price_per_bag} onChange={e => setDanaBillForm(f => ({ ...f, price_per_bag: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm">
+            <span className="text-amber-800">{t('common.total')}</span>
+            <span className="font-bold text-amber-700">{formatCurrency((parseFloat(danaBillForm.quantity) || 0) * (parseFloat(danaBillForm.price_per_bag) || 0))}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.date')}</label>
+              <input type="date" value={danaBillForm.dispatch_date} onChange={e => setDanaBillForm(f => ({ ...f, dispatch_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
+              <input value={danaBillForm.notes} onChange={e => setDanaBillForm(f => ({ ...f, notes: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <button type="button" onClick={() => { setDanaBillModal(false); setEditDanaBill(null) }} className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
+            <button type="submit" disabled={savingDanaBill} className="px-5 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-60">
+              {savingDanaBill ? t('common.saving') : editDanaBill ? t('common.saveChanges') : t('danaBill.write')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!deleteDanaTarget}
+        onClose={() => setDeleteDanaTarget(null)}
+        onConfirm={async () => { await deleteDanaBill(deleteDanaTarget.id); setDeleteDanaTarget(null) }}
+        title={t('danaBill.deleteTitle')}
+        message={t('danaBill.deleteConfirm')}
       />
 
       {/* Batch (Season) Modal */}
