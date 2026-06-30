@@ -38,7 +38,7 @@ export function useRoznamcha(date) {
       supabase.from('expenses').select('*').eq('expense_date', date).order('created_at'),
       supabase.from('stock_purchases').select('*, products(name)').eq('purchase_date', date).order('created_at'),
       // Inbound goods from suppliers
-      supabase.from('supplier_dispatches').select('*, suppliers(company_name)').eq('dispatch_date', date).order('created_at'),
+      supabase.from('supplier_dispatches').select('*, suppliers(company_name), farms(name, name_fa, name_ps)').eq('dispatch_date', date).order('created_at'),
       // Payments made to suppliers
       supabase.from('supplier_payments').select('*, suppliers(company_name)').eq('payment_date', date).order('created_at'),
       // Chickens sent to market sellers

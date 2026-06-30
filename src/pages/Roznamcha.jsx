@@ -11,6 +11,7 @@ import QuickEntryModal from '../components/common/QuickEntryModal'
 import { ROZNAMCHA_TYPE_BI, EXPENSE_CATEGORY_BI, SUPPLY_ITEM_BI } from '../utils/biLabels'
 
 const CAT_ICONS = { fuel: '⛽', salary: '👤', rent: '🏢', maintenance: '🔧', utilities: '💡', other: '📦' }
+const DANA_LABEL_KEY = { '4_number': 'dana4Number', '6_number': 'dana6Number', '9_number': 'dana9Number', '12_number': 'dana12Number', other: 'danaOther' }
 
 function entryTime(entry) {
   if (!entry.created_at) return ''
@@ -116,15 +117,21 @@ function EntryCard({ entry, onDelete, onEdit }) {
       ].filter(Boolean).join(' · ')
       amount = entry.total_cost || 0
       break
-    case 'supplier_dispatch':
-      title = `${entry.product_name || '—'} ← ${entry.suppliers?.company_name || '—'}`
+    case 'supplier_dispatch': {
+      const client = entry.farms ? lf(entry.farms, 'name', lang) : null
+      title = client
+        ? `🌾 ${client} ← ${entry.suppliers?.company_name || '—'}`
+        : `${entry.product_name || '—'} ← ${entry.suppliers?.company_name || '—'}`
+      const danaK = DANA_LABEL_KEY[entry.dana_type]
       detail = [
+        danaK ? t(`suppliers.${danaK}`) : '',
         entry.quantity ? `${entry.quantity} × ${formatCurrency(entry.price_per_bag || 0)}` : '',
         entry.bill_number ? `${t('market.billNumber')}: ${entry.bill_number}` : '',
         entry.notes || '',
       ].filter(Boolean).join(' · ')
       amount = entry.total_amount || 0
       break
+    }
     case 'supplier_payment':
       title = `${entry.suppliers?.company_name || '—'}`
       detail = entry.notes || ''
