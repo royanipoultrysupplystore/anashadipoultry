@@ -53,7 +53,7 @@ export default function ChozaSupplierDetail() {
   const { t, isRTL, lang } = useLanguage()
   const { deleteSupplier, updateSupplier } = useSuppliers()
   const {
-    supplier, transactions, payments, loading,
+    supplier, transactions, payments, loading, openingBalance,
     totalInvested, totalPaid, remaining, totalChoza, totalProfit,
     chozaSentToFarms, remainingChoza, chozaBatches,
     addTransaction, updateTransaction, deleteTransaction,
@@ -238,6 +238,12 @@ export default function ChozaSupplierDetail() {
           <div className="text-xs text-slate-500 mb-1">{t('suppliers.totalInvested')}</div>
           <div className="text-lg font-bold text-red-600">{formatCurrency(totalInvested)}</div>
         </div>
+        {openingBalance > 0 && (
+          <div className="bg-amber-50 rounded-xl border border-amber-200 shadow-sm p-4">
+            <div className="text-xs text-amber-600 mb-1">{t('farms.openingBalance')}</div>
+            <div className="text-lg font-bold text-amber-600">{formatCurrency(openingBalance)}</div>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
           <div className="text-xs text-slate-500 mb-1">{t('suppliers.totalPaid')}</div>
           <div className="text-lg font-bold text-green-600">{formatCurrency(totalPaid)}</div>

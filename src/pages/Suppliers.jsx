@@ -7,7 +7,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog'
 import PhoneInput from '../components/common/PhoneInput'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const emptyForm = { company_name: '', owner_name: '', phone: '', notes: '' }
+const emptyForm = { company_name: '', owner_name: '', phone: '', notes: '', opening_balance: 0 }
 
 const TABS = [
   { key: 'meel',     labelKey: 'meelSuppliers',     icon: '🌾', iconColor: 'text-[#0F5257]', bgColor: 'bg-[#0F5257]/10' },
@@ -45,17 +45,18 @@ export default function Suppliers() {
 
   function openEdit(s) {
     setEditItem(s)
-    setForm({ company_name: s.company_name, owner_name: s.owner_name || '', phone: s.phone || '', notes: s.notes || '' })
+    setForm({ company_name: s.company_name, owner_name: s.owner_name || '', phone: s.phone || '', notes: s.notes || '', opening_balance: s.opening_balance ?? 0 })
     setModalOpen(true)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    const data = { ...form, opening_balance: Math.max(0, parseFloat(form.opening_balance) || 0) }
     setSaving(true)
     if (editItem) {
-      await updateSupplier(editItem.id, form)
+      await updateSupplier(editItem.id, data)
     } else {
-      await addSupplier({ ...form, type: activeTab })
+      await addSupplier({ ...data, type: activeTab })
     }
     setSaving(false)
     setModalOpen(false)
@@ -193,6 +194,16 @@ export default function Suppliers() {
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 resize-none"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              {t('farms.openingBalance')} <span className="text-slate-400 font-normal">(AFN)</span>
+            </label>
+            <input type="number" min="0" step="0.01" value={form.opening_balance ?? 0}
+              onChange={e => setForm(f => ({ ...f, opening_balance: e.target.value }))}
+              placeholder="0"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+            <p className="text-xs text-slate-400 mt-1">{t('suppliers.openingBalanceHelp')}</p>
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">

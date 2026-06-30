@@ -361,15 +361,16 @@ export function useSupplierDetail(supplierId) {
     return true
   }
 
+  const openingBalance = parseFloat(supplier?.opening_balance) || 0
   const totalOwed = dispatches.reduce((s, d) => s + (d.total_amount || 0), 0)
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0)
-  const remaining = totalOwed - totalPaid
+  const remaining = openingBalance + totalOwed - totalPaid
   const totalBags = dispatches.reduce((s, d) => s + (d.quantity || 0), 0)
   const remainingBags = totalBags - dispatchedBags
   const totalCommission = dispatches.reduce((s, d) => s + (d.total_commission || 0), 0)
 
   return {
-    supplier, dispatches, payments, loading,
+    supplier, dispatches, payments, loading, openingBalance,
     totalOwed, totalPaid, remaining, totalBags, dispatchedBags, dispatchedByBill, outboundsByBill, remainingBags, totalCommission,
     receiveDispatch, updateDispatch, deleteDispatch, recordPayment, updatePayment, deletePayment,
     refetch: fetch,
@@ -511,12 +512,13 @@ export function useMedicineSupplierDetail(supplierId) {
     .reduce((s, p) => s + ((p.purchase_price_usd || 0) * (p.quantity || 0)), 0)
   const totalPaidAFN = payments.reduce((s, p) => s + (p.amount || 0), 0)
   const totalPaidUSD = payments.reduce((s, p) => s + (p.amount_usd || 0), 0)
-  const remainingAFN = totalOwedAFN - totalPaidAFN
+  const openingBalance = parseFloat(supplier?.opening_balance) || 0
+  const remainingAFN = openingBalance + totalOwedAFN - totalPaidAFN
   const remainingUSD = totalOwedUSD - totalPaidUSD
   const totalUnits = purchases.reduce((s, p) => s + (p.quantity || 0), 0)
 
   return {
-    supplier, purchases, payments, loading,
+    supplier, purchases, payments, loading, openingBalance,
     totalOwedAFN, totalOwedUSD, totalPaidAFN, totalPaidUSD, remainingAFN, remainingUSD,
     totalUnits,
     recordPayment, updatePayment, deletePayment,
@@ -702,16 +704,17 @@ export function useChozaSupplierDetail(supplierId) {
     return true
   }
 
+  const openingBalance = parseFloat(supplier?.opening_balance) || 0
   const totalInvested = transactions.reduce((s, tx) => s + (tx.total_amount || 0), 0)
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0)
-  const remaining = totalInvested - totalPaid
+  const remaining = openingBalance + totalInvested - totalPaid
   const totalChoza = transactions.reduce((s, tx) => s + (tx.total_choza || 0), 0)
   const totalProfit = transactions.reduce((s, tx) => s + (tx.total_profit || 0), 0)
   const chozaSentToFarms = chozaBatches.reduce((s, b) => s + (b.initial_chicken_count || 0), 0)
   const remainingChoza = totalChoza - chozaSentToFarms
 
   return {
-    supplier, transactions, payments, loading,
+    supplier, transactions, payments, loading, openingBalance,
     totalInvested, totalPaid, remaining, totalChoza, totalProfit,
     chozaSentToFarms, remainingChoza, chozaBatches,
     addTransaction, updateTransaction, deleteTransaction,

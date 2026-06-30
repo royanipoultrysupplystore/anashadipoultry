@@ -63,7 +63,7 @@ export default function SupplierDetail() {
   const { t, lang, isRTL } = useLanguage()
   const { businessName } = useBusinessInfo()
   const {
-    supplier, dispatches, payments, loading,
+    supplier, dispatches, payments, loading, openingBalance,
     totalOwed, totalPaid, remaining, totalBags, totalCommission,
     receiveDispatch, updateDispatch, deleteDispatch,
     recordPayment, updatePayment, deletePayment,
@@ -238,6 +238,7 @@ export default function SupplierDetail() {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         {[
           { label: t('suppliers.totalOwed'), value: formatCurrency(totalOwed), color: 'text-red-600' },
+          ...(openingBalance > 0 ? [{ label: t('farms.openingBalance'), value: formatCurrency(openingBalance), color: 'text-amber-600' }] : []),
           { label: t('suppliers.totalPaid'), value: formatCurrency(totalPaid), color: 'text-green-600' },
           { label: t('suppliers.remaining'), value: formatCurrency(remaining), color: remaining > 0 ? 'text-orange-600' : 'text-slate-600' },
         ].map(({ label, value, color }) => (

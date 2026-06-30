@@ -21,14 +21,14 @@ export default function MedicineSupplierDetail() {
   const { suppliers: allSuppliers, deleteSupplier, updateSupplier } = useSuppliers()
   const medicineSuppliers = allSuppliers.filter(s => s.type === 'medicine')
   const {
-    supplier, purchases, payments, loading,
+    supplier, purchases, payments, loading, openingBalance,
     totalOwedAFN, totalOwedUSD, totalPaidAFN, totalPaidUSD, remainingAFN, remainingUSD,
     totalUnits,
     recordPayment, updatePayment, deletePayment,
     updatePurchase, deletePurchase,
   } = useMedicineSupplierDetail(id)
 
-  const hasAFN = totalOwedAFN > 0 || totalPaidAFN > 0
+  const hasAFN = totalOwedAFN > 0 || totalPaidAFN > 0 || openingBalance > 0
   const hasUSD = totalOwedUSD > 0 || totalPaidUSD > 0
 
   const [paymentModal, setPaymentModal] = useState(false)
@@ -199,6 +199,12 @@ export default function MedicineSupplierDetail() {
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">{t('suppliers.afnBalance')}</div>
           <div className="grid grid-cols-3 gap-3">
+            {openingBalance > 0 && (
+              <div>
+                <div className="text-xs text-slate-500 mb-0.5">{t('farms.openingBalance')}</div>
+                <div className="text-lg font-bold text-amber-600">{formatCurrency(openingBalance)}</div>
+              </div>
+            )}
             <div>
               <div className="text-xs text-slate-500 mb-0.5">{t('suppliers.totalOwed')}</div>
               <div className="text-lg font-bold text-red-600">{formatCurrency(totalOwedAFN)}</div>
