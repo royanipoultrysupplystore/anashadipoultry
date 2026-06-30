@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Truck, CreditCard, Plus, Trash2, Edit2, ChevronDown, ChevronRight as ChevronRightIcon, FileText } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Truck, CreditCard, Plus, Trash2, Edit2, FileText } from 'lucide-react'
 import { useSupplierDetail } from '../hooks/useSuppliers'
 import { useBusinessInfo } from '../contexts/SettingsContext'
 import { printDanaBill } from '../utils/printDanaBill'
@@ -64,7 +64,7 @@ export default function SupplierDetail() {
   const { businessName } = useBusinessInfo()
   const {
     supplier, dispatches, payments, loading,
-    totalOwed, totalPaid, remaining, totalBags, dispatchedBags, dispatchedByBill, outboundsByBill, remainingBags, totalCommission,
+    totalOwed, totalPaid, remaining, totalBags, totalCommission,
     receiveDispatch, updateDispatch, deleteDispatch,
     recordPayment, updatePayment, deletePayment,
   } = useSupplierDetail(id)
@@ -81,40 +81,16 @@ export default function SupplierDetail() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [waPrompt, setWaPrompt] = useState(null)
   const [billSearch, setBillSearch] = useState('')
-  const [billFilter, setBillFilter] = useState('all') // 'all' | 'available' | 'used'
-  const [expandedBills, setExpandedBills] = useState(() => new Set())
-
-  function toggleExpanded(billId) {
-    setExpandedBills(prev => {
-      const next = new Set(prev)
-      if (next.has(billId)) next.delete(billId); else next.add(billId)
-      return next
-    })
-  }
-
   const filteredDispatches = dispatches.filter(d => {
-    if (billSearch) {
-      const q = billSearch.toLowerCase()
-      const match = (
-        (d.bill_number || '').toLowerCase().includes(q) ||
-        (d.product_name || '').toLowerCase().includes(q) ||
-        (d.dana_type || '').toLowerCase().includes(q)
-      )
-      if (!match) return false
-    }
-    if (billFilter === 'all') return true
-    const sent = dispatchedByBill[d.id] || 0
-    const left = Math.max(0, (d.quantity || 0) - sent)
-    if (billFilter === 'available') return left > 0
-    if (billFilter === 'used') return sent > 0 && left === 0
-    return true
+    if (!billSearch) return true
+    const q = billSearch.toLowerCase()
+    return (
+      (d.bill_number || '').toLowerCase().includes(q) ||
+      (d.product_name || '').toLowerCase().includes(q) ||
+      (d.dana_type || '').toLowerCase().includes(q) ||
+      (lf(d.farms, 'name', lang) || '').toLowerCase().includes(q)
+    )
   })
-
-  const availableCount = dispatches.filter(d => ((d.quantity || 0) - (dispatchedByBill[d.id] || 0)) > 0).length
-  const usedCount = dispatches.filter(d => {
-    const sent = dispatchedByBill[d.id] || 0
-    return sent > 0 && sent >= (d.quantity || 0)
-  }).length
 
   const BackIcon = isRTL ? ArrowRight : ArrowLeft
 
@@ -286,50 +262,6 @@ export default function SupplierDetail() {
         </div>
       </div>
 
-      {/* Per-Dana-type breakdown — sum each type's bills / consumed / remaining
-          from the bills loaded above. Useful even in broker mode for "how
-          many 9-Number bags have we billed through this meel" type questions. */}
-      {(() => {
-        const byType = {}
-        for (const d of dispatches) {
-          const key = d.dana_type || 'other'
-          if (!byType[key]) byType[key] = { type: key, received: 0, dispatched: 0 }
-          byType[key].received += d.quantity || 0
-          byType[key].dispatched += dispatchedByBill[d.id] || 0
-        }
-        const order = DANA_OPTIONS.map(o => o.value)
-        const rows = Object.values(byType)
-          .map(s => ({ ...s, remaining: Math.max(0, s.received - s.dispatched) }))
-          .sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
-        if (rows.length === 0) return null
-        return (
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-              Bags Billed — by {t('suppliers.danaType')}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {rows.map(r => {
-                const opt = DANA_OPTIONS.find(o => o.value === r.type)
-                const label = opt ? t(`suppliers.${opt.labelKey}`) : r.type
-                const badge = opt?.color || 'bg-slate-100 text-slate-600'
-                return (
-                  <div key={r.type} className="border border-slate-100 rounded-lg p-3">
-                    <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge}`}>{label}</span>
-                    <div className="mt-2 text-lg font-bold text-blue-600">{r.received}</div>
-                    <div className="text-[10px] text-slate-400 -mt-0.5">total bags</div>
-                    <div className="mt-1.5 text-xs flex items-center gap-2">
-                      <span className="text-orange-600">↗ {r.dispatched}</span>
-                      <span className="text-slate-300">·</span>
-                      <span className={r.remaining > 0 ? 'text-green-700 font-semibold' : 'text-slate-400 line-through'}>{r.remaining} left</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })()}
-
       <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-600 leading-relaxed">
         <span className="font-semibold text-slate-700">Broker view</span> — Anas Hadi doesn't receive Dana from this meel.
         Each row below is a <span className="font-medium">bill</span> written to a client/farm; the client carries it to the meel.
@@ -351,37 +283,16 @@ export default function SupplierDetail() {
         </div>
 
         {dispatches.length > 0 && (
-          <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { key: 'all',       label: 'All',       count: dispatches.length },
-                { key: 'available', label: 'Available', count: availableCount },
-                { key: 'used',      label: 'Fully used',count: usedCount },
-              ].map(c => (
-                <button
-                  key={c.key}
-                  onClick={() => setBillFilter(c.key)}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-                    billFilter === c.key
-                      ? 'bg-[#0F5257] text-white'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  {c.label} <span className="ms-1 opacity-70">({c.count})</span>
-                </button>
-              ))}
-            </div>
+          <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
             <input
               type="text"
               value={billSearch}
               onChange={e => setBillSearch(e.target.value)}
-              placeholder="Search by bill #, product, or dana type..."
+              placeholder="Search by bill #, client, or dana type..."
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30"
             />
-            {(billSearch || billFilter !== 'all') && (
-              <p className="text-xs text-slate-500">
-                {filteredDispatches.length} of {dispatches.length} bills
-              </p>
+            {billSearch && (
+              <p className="text-xs text-slate-500 mt-2">{filteredDispatches.length} of {dispatches.length} bills</p>
             )}
           </div>
         )}
@@ -392,22 +303,9 @@ export default function SupplierDetail() {
           <p className="text-center py-8 text-slate-400 text-sm">No bills match "{billSearch}"</p>
         ) : (
           <div className="divide-y divide-slate-50">
-            {filteredDispatches.map(d => {
-              const outbounds = outboundsByBill[d.id] || []
-              const isExpanded = expandedBills.has(d.id)
-              const hasHistory = outbounds.length > 0
-              return (
-              <div key={d.id}>
-              <div className="px-5 py-3 flex items-center gap-3">
-                <button
-                  onClick={() => hasHistory && toggleExpanded(d.id)}
-                  disabled={!hasHistory}
-                  title={hasHistory ? (isExpanded ? 'Hide outbound history' : 'Show outbound history') : 'Not dispatched yet'}
-                  className="shrink-0 p-1 rounded text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRightIcon size={16} />}
-                </button>
-                <div className="flex-1 grid grid-cols-2 sm:grid-cols-6 gap-3 text-sm">
+            {filteredDispatches.map(d => (
+              <div key={d.id} className="px-5 py-3 flex items-center gap-3">
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                   <div>
                     <div className="text-xs text-slate-400">{t('common.date')}</div>
                     <div className="font-medium">{formatDate(d.dispatch_date)}</div>
@@ -432,27 +330,11 @@ export default function SupplierDetail() {
                   <div>
                     <div className="text-xs text-slate-400">{t('suppliers.bags')}</div>
                     <div className="font-bold text-blue-600">{d.quantity}</div>
-                    {(() => {
-                      const dispatched = dispatchedByBill[d.id] || 0
-                      const billRemaining = Math.max(0, (d.quantity || 0) - dispatched)
-                      const isFullyUsed = dispatched > 0 && billRemaining === 0
-                      return (
-                        <div className={`text-xs mt-0.5 ${isFullyUsed ? 'text-slate-400' : 'text-slate-500'}`}>
-                          <span className={isFullyUsed ? 'line-through' : ''}>
-                            <span className="text-red-500">{dispatched}</span> sent / <span className={`font-semibold ${billRemaining > 0 ? 'text-green-600' : 'text-slate-400'}`}>{billRemaining}</span> left
-                          </span>
-                        </div>
-                      )
-                    })()}
                     {d.weight_kg && <div className="text-xs text-slate-400">{d.weight_kg} kg</div>}
                   </div>
                   <div>
                     <div className="text-xs text-slate-400">{t('common.total')}</div>
                     <div className="font-medium text-red-600">{formatCurrency(d.total_amount)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400">{t('suppliers.commission')}</div>
-                    <div className="font-medium text-purple-600">{formatCurrency(d.total_commission)}</div>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
@@ -467,94 +349,7 @@ export default function SupplierDetail() {
                   </button>
                 </div>
               </div>
-
-              {/* Compact farm summary so the user can see which farms got bags
-                  from this bill without expanding. Collapses repeats from the
-                  same farm into one chip. */}
-              {hasHistory && !isExpanded && (() => {
-                const byFarm = {}
-                for (const o of outbounds) {
-                  const name = lf(o.farms, 'name', lang) || '—'
-                  byFarm[name] = (byFarm[name] || 0) + (o.quantity || 0)
-                }
-                const farms = Object.entries(byFarm)
-                const shown = farms.slice(0, 3)
-                const extra = farms.length - shown.length
-                return (
-                  <div className="px-5 pb-3 -mt-1 ms-7 flex items-center flex-wrap gap-x-3 gap-y-1 text-xs">
-                    <span className="text-slate-400 uppercase tracking-wide font-semibold">Sent to</span>
-                    {shown.map(([name, bags]) => (
-                      <span key={name} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
-                        <span className="font-medium">{name}</span>
-                        <span className="text-slate-400">·</span>
-                        <span className="text-blue-600 font-semibold">{bags} bags</span>
-                      </span>
-                    ))}
-                    {extra > 0 && (
-                      <button onClick={() => toggleExpanded(d.id)} className="text-slate-500 hover:text-[#0F5257] underline">
-                        +{extra} more
-                      </button>
-                    )}
-                  </div>
-                )
-              })()}
-
-              {isExpanded && hasHistory && (
-                <div className="bg-slate-50/70 px-5 pb-4">
-                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                    Dispatched to farms ({outbounds.length})
-                  </div>
-                  <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto">
-                    <table className="w-full text-sm min-w-[640px]">
-                      <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('common.date')}</th>
-                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('dispatches.invoice')}</th>
-                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('suppliers.billNumber')}</th>
-                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('suppliers.danaType')}</th>
-                          <th className="text-start px-3 py-2 text-xs font-semibold text-slate-500">{t('dispatches.farm')}</th>
-                          <th className="text-end px-3 py-2 text-xs font-semibold text-slate-500">{t('suppliers.bags')}</th>
-                          <th className="text-end px-3 py-2 text-xs font-semibold text-slate-500">{t('common.total')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {outbounds.map((o, i) => {
-                          const danaOpt = DANA_OPTIONS.find(opt => opt.value === d.dana_type)
-                          return (
-                          <tr key={`${d.id}-${o.dispatch_id || i}`}>
-                            <td className="px-3 py-2 text-slate-600">{formatDate(o.dispatch_date)}</td>
-                            <td className="px-3 py-2">
-                              {o.invoice_number ? (
-                                <Link to="/dispatches" className="text-xs font-mono font-semibold bg-[#0F5257]/10 text-[#0F5257] px-2 py-0.5 rounded hover:bg-[#0F5257]/20">
-                                  #{o.invoice_number}
-                                </Link>
-                              ) : '—'}
-                            </td>
-                            <td className="px-3 py-2">
-                              {d.bill_number ? (
-                                <span className="text-xs font-mono font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">#{d.bill_number}</span>
-                              ) : '—'}
-                            </td>
-                            <td className="px-3 py-2">
-                              {danaOpt ? (
-                                <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${danaOpt.color}`}>
-                                  {t(`suppliers.${danaOpt.labelKey}`)}
-                                </span>
-                              ) : <span className="text-slate-400">—</span>}
-                            </td>
-                            <td className="px-3 py-2 font-medium text-slate-700">{lf(o.farms, 'name', lang) || '—'}</td>
-                            <td className="px-3 py-2 text-end font-semibold text-blue-600">{o.quantity}</td>
-                            <td className="px-3 py-2 text-end text-slate-700">{formatCurrency(o.total_amount)}</td>
-                          </tr>
-                        )})}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-              </div>
-              )
-            })}
+            ))}
           </div>
         )}
       </div>
