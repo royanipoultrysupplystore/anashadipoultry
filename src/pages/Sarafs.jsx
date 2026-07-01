@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog'
 import PhoneInput from '../components/common/PhoneInput'
 import { formatCurrency } from '../utils/formatCurrency'
 import { useLanguage } from '../contexts/LanguageContext'
+import { SARAF_BI, bi } from '../utils/biLabels'
 
 const emptyForm = { name: '', phone: '', location: '', notes: '', opening_holding: 0, opening_overpaid: 0 }
 
@@ -49,16 +50,16 @@ export default function Sarafs() {
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder={t('saraf.searchPlaceholder')}
+          placeholder={bi(SARAF_BI, 'searchPlaceholder')}
           className="flex-1 px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30"
         />
         <button onClick={openAdd} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6] transition-colors">
-          <Plus size={16} /> {t('saraf.addSaraf')}
+          <Plus size={16} /> {bi(SARAF_BI, 'addSaraf')}
         </button>
       </div>
 
       <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-600 leading-relaxed">
-        <span className="font-semibold text-slate-700">{t('saraf.introTerm')}</span> — {t('saraf.intro')}
+        <span className="font-semibold text-slate-700">{bi(SARAF_BI, 'introTerm')}</span> — {bi(SARAF_BI, 'intro')}
       </div>
 
       {loading ? (
@@ -68,13 +69,13 @@ export default function Sarafs() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <Repeat size={48} className="mb-4 opacity-30" />
-          <p className="text-sm">{search ? t('saraf.noSarafsSearch') : t('saraf.noSarafs')}</p>
+          <p className="text-sm">{search ? bi(SARAF_BI, 'noSarafsSearch') : bi(SARAF_BI, 'noSarafs')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(s => {
             const balanceColor = s.balance > 0 ? 'text-amber-700 bg-amber-50' : s.balance < 0 ? 'text-red-700 bg-red-50' : 'text-emerald-700 bg-emerald-50'
-            const balanceLabel = s.balance > 0 ? t('saraf.holding') : s.balance < 0 ? t('saraf.overPaid') : t('saraf.settled')
+            const balanceLabel = s.balance > 0 ? bi(SARAF_BI, 'holding') : s.balance < 0 ? bi(SARAF_BI, 'overPaid') : bi(SARAF_BI, 'settled')
             return (
               <div
                 key={s.id}
@@ -103,11 +104,11 @@ export default function Sarafs() {
 
                 <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
                   <div className="bg-green-50 rounded-lg p-2">
-                    <p className="text-green-600 mb-0.5">{t('saraf.inFromClients')}</p>
+                    <p className="text-green-600 mb-0.5">{bi(SARAF_BI, 'inFromClients')}</p>
                     <p className="font-bold text-green-700">{formatCurrency(s.total_in)}</p>
                   </div>
                   <div className="bg-red-50 rounded-lg p-2">
-                    <p className="text-red-600 mb-0.5">{t('saraf.outToMeels')}</p>
+                    <p className="text-red-600 mb-0.5">{bi(SARAF_BI, 'outToMeels')}</p>
                     <p className="font-bold text-red-700">{formatCurrency(s.total_out)}</p>
                   </div>
                 </div>
@@ -134,11 +135,11 @@ export default function Sarafs() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { deleteSaraf(deleteTarget?.id); setDeleteTarget(null) }}
-        title={t('saraf.deleteSaraf')}
-        message={`"${deleteTarget?.name}" — ${t('saraf.deleteSarafMsg')}`}
+        title={bi(SARAF_BI, 'deleteSaraf')}
+        message={`"${deleteTarget?.name}" — ${bi(SARAF_BI, 'deleteSarafMsg')}`}
       />
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? t('saraf.editSaraf') : t('saraf.addSaraf')}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? bi(SARAF_BI, 'editSaraf') : bi(SARAF_BI, 'addSaraf')}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.name')} *</label>
@@ -162,28 +163,28 @@ export default function Sarafs() {
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 resize-none" />
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
-            <p className="text-xs font-semibold text-amber-800">{t('saraf.openingBalances')} <span className="font-normal text-amber-700">({t('saraf.openingBalancesHint')})</span></p>
+            <p className="text-xs font-semibold text-amber-800">{bi(SARAF_BI, 'openingBalances')} <span className="font-normal text-amber-700">({bi(SARAF_BI, 'openingBalancesHint')})</span></p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.openingHolding')} <span className="text-slate-400 font-normal">(AFN)</span></label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{bi(SARAF_BI, 'openingHolding')} <span className="text-slate-400 font-normal">(AFN)</span></label>
                 <input type="number" min="0" step="0.01" value={form.opening_holding ?? 0}
                   onChange={e => setForm(f => ({ ...f, opening_holding: e.target.value }))} placeholder="0"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                <p className="text-[11px] text-slate-400 mt-1">{t('saraf.openingHoldingHint')}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{bi(SARAF_BI, 'openingHoldingHint')}</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.overPaidAdvanced')} <span className="text-slate-400 font-normal">(AFN)</span></label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{bi(SARAF_BI, 'overPaidAdvanced')} <span className="text-slate-400 font-normal">(AFN)</span></label>
                 <input type="number" min="0" step="0.01" value={form.opening_overpaid ?? 0}
                   onChange={e => setForm(f => ({ ...f, opening_overpaid: e.target.value }))} placeholder="0"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                <p className="text-[11px] text-slate-400 mt-1">{t('saraf.overPaidAdvancedHint')}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{bi(SARAF_BI, 'overPaidAdvancedHint')}</p>
               </div>
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
             <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-medium bg-[#0F5257] text-white rounded-lg hover:bg-[#14B8A6] disabled:opacity-60">
-              {saving ? t('common.saving') : editItem ? t('common.saveChanges') : t('saraf.addSaraf')}
+              {saving ? t('common.saving') : editItem ? t('common.saveChanges') : bi(SARAF_BI, 'addSaraf')}
             </button>
           </div>
         </form>
