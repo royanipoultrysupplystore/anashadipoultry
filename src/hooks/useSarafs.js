@@ -27,7 +27,9 @@ export function useSarafs() {
     setSarafs((sarafsRes.data || []).map(s => {
       const inAmt = inBy[s.id] || 0
       const outAmt = outBy[s.id] || 0
-      return { ...s, total_in: inAmt, total_out: outAmt, balance: inAmt - outAmt }
+      // Opening: holding adds, over-paid (money the Saraf fronted) subtracts.
+      const openNet = (parseFloat(s.opening_holding) || 0) - (parseFloat(s.opening_overpaid) || 0)
+      return { ...s, total_in: inAmt, total_out: outAmt, balance: openNet + inAmt - outAmt }
     }))
     setLoading(false)
   }, [])
@@ -40,6 +42,8 @@ export function useSarafs() {
       phone: data.phone?.trim() || null,
       location: data.location?.trim() || null,
       notes: data.notes?.trim() || null,
+      opening_holding: Math.max(0, parseFloat(data.opening_holding) || 0),
+      opening_overpaid: Math.max(0, parseFloat(data.opening_overpaid) || 0),
       is_active: true,
     }])
     if (error) { toast.error(error.message); return false }
@@ -54,6 +58,8 @@ export function useSarafs() {
       phone: data.phone?.trim() || null,
       location: data.location?.trim() || null,
       notes: data.notes?.trim() || null,
+      opening_holding: Math.max(0, parseFloat(data.opening_holding) || 0),
+      opening_overpaid: Math.max(0, parseFloat(data.opening_overpaid) || 0),
       is_active: data.is_active,
     }).eq('id', id)
     if (error) { toast.error(error.message); return false }
@@ -160,13 +166,16 @@ export function useSarafDetail(sarafId) {
     return true
   }
 
+  const openingHolding = parseFloat(saraf?.opening_holding) || 0
+  const openingOverpaid = parseFloat(saraf?.opening_overpaid) || 0
   const totalIn = inbound.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
   const totalOut = outbound.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
-  const balance = totalIn - totalOut
+  // Currently holding = opening holding − opening over-paid + IN − OUT.
+  const balance = openingHolding - openingOverpaid + totalIn - totalOut
 
   return {
     saraf, inbound, outbound, loading,
-    totalIn, totalOut, balance,
+    totalIn, totalOut, balance, openingHolding, openingOverpaid,
     recordIn, recordOut, deleteIn, deleteOut, refetch: load,
   }
 }

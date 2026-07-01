@@ -21,7 +21,7 @@ export default function SarafDetail() {
   const { t, lang, isRTL } = useLanguage()
   const { farms } = useFarms()
   const { suppliers } = useSuppliers()
-  const { saraf, inbound, outbound, loading, totalIn, totalOut, balance, recordIn, recordOut, deleteIn, deleteOut } = useSarafDetail(id)
+  const { saraf, inbound, outbound, loading, totalIn, totalOut, balance, openingHolding, openingOverpaid, recordIn, recordOut, deleteIn, deleteOut } = useSarafDetail(id)
 
   const [txModal, setTxModal] = useState(null) // null | 'in' | 'out'
   const [inForm, setInForm] = useState(emptyIn)
@@ -33,7 +33,6 @@ export default function SarafDetail() {
   // supplier (OUT form). Loaded on demand when the modal opens or its key
   // dropdown changes — keeps initial page fast.
   const [clientBills, setClientBills] = useState([])
-  const [supplierBills, setSupplierBills] = useState([])
 
   useEffect(() => {
     if (txModal !== 'in' || !inForm.farm_id) { setClientBills([]); return }
@@ -59,22 +58,6 @@ export default function SarafDetail() {
     })()
   }, [txModal, inForm.farm_id])
 
-  useEffect(() => {
-    if (txModal !== 'out' || !outForm.supplier_id) { setSupplierBills([]); return }
-    ;(async () => {
-      const { data } = await supabase
-        .from('supplier_dispatches')
-        .select('id, bill_number, dispatch_date, quantity, price_per_bag, total_amount, dispatch_items(dispatches(farm_id, farms(id, name, name_fa, name_ps)))')
-        .eq('supplier_id', outForm.supplier_id)
-        .order('dispatch_date', { ascending: false })
-      // Flatten the linked client (first dispatch_item is enough for broker bills).
-      const bills = (data || []).map(b => {
-        const farm = b.dispatch_items?.[0]?.dispatches?.farms
-        return { ...b, _client: farm || null }
-      })
-      setSupplierBills(bills)
-    })()
-  }, [txModal, outForm.supplier_id])
 
   const BackIcon = isRTL ? ArrowRight : ArrowLeft
 
@@ -183,6 +166,11 @@ export default function SarafDetail() {
         <div className={`rounded-xl p-4 border ${balanceCard.color}`}>
           <p className="text-xs mb-1 opacity-80">{balanceCard.label}</p>
           <p className="text-2xl font-bold">{formatCurrency(Math.abs(balance))}</p>
+          {(openingHolding > 0 || openingOverpaid > 0) && (
+            <p className="text-[11px] mt-1 opacity-70">
+              incl. opening{openingHolding > 0 ? ` +${formatCurrency(openingHolding)}` : ''}{openingOverpaid > 0 ? ` −${formatCurrency(openingOverpaid)}` : ''}
+            </p>
+          )}
         </div>
       </div>
 
@@ -405,42 +393,6 @@ export default function SarafDetail() {
               <option value="">— pick a supplier —</option>
               {activeSuppliers.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
             </select>
-          </div>
-          {outForm.supplier_id && (
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">For bill <span className="text-slate-400 font-normal">(optional)</span></label>
-              <select value={outForm.supplier_dispatch_id}
-                onChange={e => {
-                  const bill = supplierBills.find(b => b.id === e.target.value)
-                  setOutForm(f => ({
-                    ...f,
-                    supplier_dispatch_id: e.target.value,
-                    farm_id: bill?._client?.id || f.farm_id,
-                    amount: bill ? String(bill.total_amount || (bill.quantity || 0) * (bill.price_per_bag || 0)) : f.amount,
-                  }))
-                }}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-                <option value="">— pick a bill —</option>
-                {supplierBills.map(b => (
-                  <option key={b.id} value={b.id}>
-                    Bill #{b.bill_number || '—'} · {b._client ? lf(b._client, 'name', lang) : 'no client'} · {b.quantity} bags · {formatCurrency(b.total_amount)}
-                  </option>
-                ))}
-              </select>
-              {supplierBills.length === 0 && (
-                <p className="text-xs text-amber-700 mt-1">No bills exist for this supplier yet.</p>
-              )}
-            </div>
-          )}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">On behalf of client / farm <span className="text-slate-400 font-normal">(optional)</span></label>
-            <select value={outForm.farm_id}
-              onChange={e => setOutForm(f => ({ ...f, farm_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-              <option value="">— direct payment (no client) —</option>
-              {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)} ({f.kind === 'client' ? 'Client' : 'Farm'})</option>)}
-            </select>
-            <p className="text-xs text-slate-400 mt-1">If picking a bill above auto-fills this, the client came from the bill. You can change it.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
