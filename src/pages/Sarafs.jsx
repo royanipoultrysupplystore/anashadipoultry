@@ -49,18 +49,16 @@ export default function Sarafs() {
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search sarafs..."
+          placeholder={t('saraf.searchPlaceholder')}
           className="flex-1 px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30"
         />
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6] transition-colors">
-          <Plus size={16} /> Add Saraf
+        <button onClick={openAdd} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6] transition-colors">
+          <Plus size={16} /> {t('saraf.addSaraf')}
         </button>
       </div>
 
       <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-600 leading-relaxed">
-        <span className="font-semibold text-slate-700">Saraf / صراف</span> — a money exchanger who sits between client and meel.
-        Clients send money <span className="font-medium text-green-700">in</span>, the Saraf releases it <span className="font-medium text-red-700">out</span> to suppliers.
-        Each Saraf's balance shows how much money is in flight at any moment.
+        <span className="font-semibold text-slate-700">{t('saraf.introTerm')}</span> — {t('saraf.intro')}
       </div>
 
       {loading ? (
@@ -70,13 +68,13 @@ export default function Sarafs() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <Repeat size={48} className="mb-4 opacity-30" />
-          <p className="text-sm">{search ? `No saraf matching "${search}"` : 'No sarafs yet — add one to start tracking exchange-money flow'}</p>
+          <p className="text-sm">{search ? t('saraf.noSarafsSearch') : t('saraf.noSarafs')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(s => {
             const balanceColor = s.balance > 0 ? 'text-amber-700 bg-amber-50' : s.balance < 0 ? 'text-red-700 bg-red-50' : 'text-emerald-700 bg-emerald-50'
-            const balanceLabel = s.balance > 0 ? 'Holding' : s.balance < 0 ? 'Over-paid' : 'Settled'
+            const balanceLabel = s.balance > 0 ? t('saraf.holding') : s.balance < 0 ? t('saraf.overPaid') : t('saraf.settled')
             return (
               <div
                 key={s.id}
@@ -105,11 +103,11 @@ export default function Sarafs() {
 
                 <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
                   <div className="bg-green-50 rounded-lg p-2">
-                    <p className="text-green-600 mb-0.5">In from clients</p>
+                    <p className="text-green-600 mb-0.5">{t('saraf.inFromClients')}</p>
                     <p className="font-bold text-green-700">{formatCurrency(s.total_in)}</p>
                   </div>
                   <div className="bg-red-50 rounded-lg p-2">
-                    <p className="text-red-600 mb-0.5">Out to meels</p>
+                    <p className="text-red-600 mb-0.5">{t('saraf.outToMeels')}</p>
                     <p className="font-bold text-red-700">{formatCurrency(s.total_out)}</p>
                   </div>
                 </div>
@@ -136,11 +134,11 @@ export default function Sarafs() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { deleteSaraf(deleteTarget?.id); setDeleteTarget(null) }}
-        title="Delete Saraf"
-        message={`Delete "${deleteTarget?.name}"? Existing payments stay but lose their Saraf link.`}
+        title={t('saraf.deleteSaraf')}
+        message={`"${deleteTarget?.name}" — ${t('saraf.deleteSarafMsg')}`}
       />
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? 'Edit Saraf' : 'Add Saraf'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? t('saraf.editSaraf') : t('saraf.addSaraf')}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.name')} *</label>
@@ -164,28 +162,28 @@ export default function Sarafs() {
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 resize-none" />
           </div>
           <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-3">
-            <p className="text-xs font-semibold text-amber-800">Opening balances / موجوده حساب <span className="font-normal text-amber-700">(optional — for years of prior business)</span></p>
+            <p className="text-xs font-semibold text-amber-800">{t('saraf.openingBalances')} <span className="font-normal text-amber-700">({t('saraf.openingBalancesHint')})</span></p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Opening holding <span className="text-slate-400 font-normal">(AFN)</span></label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.openingHolding')} <span className="text-slate-400 font-normal">(AFN)</span></label>
                 <input type="number" min="0" step="0.01" value={form.opening_holding ?? 0}
                   onChange={e => setForm(f => ({ ...f, opening_holding: e.target.value }))} placeholder="0"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                <p className="text-[11px] text-slate-400 mt-1">Money the Saraf already holds for you.</p>
+                <p className="text-[11px] text-slate-400 mt-1">{t('saraf.openingHoldingHint')}</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Over-paid / advanced <span className="text-slate-400 font-normal">(AFN)</span></label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.overPaidAdvanced')} <span className="text-slate-400 font-normal">(AFN)</span></label>
                 <input type="number" min="0" step="0.01" value={form.opening_overpaid ?? 0}
                   onChange={e => setForm(f => ({ ...f, opening_overpaid: e.target.value }))} placeholder="0"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                <p className="text-[11px] text-slate-400 mt-1">Money the Saraf paid out beyond what clients paid.</p>
+                <p className="text-[11px] text-slate-400 mt-1">{t('saraf.overPaidAdvancedHint')}</p>
               </div>
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
             <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-medium bg-[#0F5257] text-white rounded-lg hover:bg-[#14B8A6] disabled:opacity-60">
-              {saving ? t('common.saving') : editItem ? t('common.saveChanges') : 'Add Saraf'}
+              {saving ? t('common.saving') : editItem ? t('common.saveChanges') : t('saraf.addSaraf')}
             </button>
           </div>
         </form>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Plus, Trash2, Repeat, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plus, Trash2, Repeat, ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-react'
 import { useSarafDetail } from '../hooks/useSarafs'
 import { useFarms } from '../hooks/useFarms'
 import { useSuppliers } from '../hooks/useSuppliers'
@@ -29,9 +29,8 @@ export default function SarafDetail() {
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null) // { kind:'in'|'out', row }
 
-  // Bills written for the selected client (IN form) / bills via the chosen
-  // supplier (OUT form). Loaded on demand when the modal opens or its key
-  // dropdown changes — keeps initial page fast.
+  // Bills written for the selected client (IN form). Loaded on demand when the
+  // modal opens or its client dropdown changes — keeps initial page fast.
   const [clientBills, setClientBills] = useState([])
 
   useEffect(() => {
@@ -91,10 +90,10 @@ export default function SarafDetail() {
 
   const activeFarms = farms.filter(f => f.is_active)
   const activeSuppliers = suppliers.filter(s => s.type === 'meel' || !s.type) // meel + legacy
+  const pmt = (n) => `${n} ${t('saraf.payments')}`
 
   // Generic balance-per-party view. Saraf is a tracking hub: clients deposit
   // lump sums (not tied to any one bill), Saraf disburses to whoever needs paying.
-  // For each party we summarise how much they're up / down on this Saraf.
   const clientBalances = (() => {
     const m = {}
     for (const p of inbound) {
@@ -127,24 +126,25 @@ export default function SarafDetail() {
     return Object.values(m).sort((a, b) => b.total - a.total)
   })()
 
-  const balanceCard = balance > 0
-    ? { color: 'bg-amber-50 border-amber-200 text-amber-700', label: 'Currently holding' }
+  const holdCard = balance > 0
+    ? { color: 'bg-amber-50 border-amber-200 text-amber-700', ring: 'text-amber-500', label: t('saraf.currentlyHolding') }
     : balance < 0
-    ? { color: 'bg-red-50 border-red-200 text-red-700', label: 'Over-paid' }
-    : { color: 'bg-emerald-50 border-emerald-200 text-emerald-700', label: 'Settled' }
+    ? { color: 'bg-red-50 border-red-200 text-red-700', ring: 'text-red-500', label: t('saraf.overPaid') }
+    : { color: 'bg-emerald-50 border-emerald-200 text-emerald-700', ring: 'text-emerald-500', label: t('saraf.settled') }
 
   return (
     <div className="space-y-4">
       <button onClick={() => navigate('/sarafs')} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700">
-        <BackIcon size={16} /> Back to Sarafs
+        <BackIcon size={16} /> {t('saraf.backToSarafs')}
       </button>
 
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
-              <Repeat size={20} className="text-[#0F5257]" /> {saraf.name}
-            </h2>
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 shrink-0 rounded-xl bg-[#0F5257]/10 flex items-center justify-center">
+            <Repeat size={20} className="text-[#0F5257]" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-800 truncate">{saraf.name}</h2>
             {saraf.phone && <p className="text-sm text-slate-500 mt-0.5">{saraf.phone}</p>}
             {saraf.location && <p className="text-sm text-slate-500">{saraf.location}</p>}
             {saraf.notes && <p className="text-sm text-slate-400 mt-1">{saraf.notes}</p>}
@@ -152,54 +152,56 @@ export default function SarafDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <p className="text-xs text-green-700 mb-1">In from clients</p>
-          <p className="text-2xl font-bold text-green-700">{formatCurrency(totalIn)}</p>
-          <p className="text-xs text-green-600 mt-0.5">{inbound.length} payment{inbound.length === 1 ? '' : 's'}</p>
+      {/* Summary — holding is the headline (full width on mobile), IN / OUT below */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className={`col-span-2 lg:col-span-1 order-1 lg:order-3 rounded-xl p-4 border flex items-center gap-3 ${holdCard.color}`}>
+          <Wallet size={28} className={`shrink-0 ${holdCard.ring}`} />
+          <div className="min-w-0">
+            <p className="text-xs mb-0.5 opacity-80">{holdCard.label}</p>
+            <p className="text-2xl font-bold leading-tight">{formatCurrency(Math.abs(balance))}</p>
+            {(openingHolding > 0 || openingOverpaid > 0) && (
+              <p className="text-[11px] mt-0.5 opacity-70">
+                {t('saraf.inclOpening')}{openingHolding > 0 ? ` +${formatCurrency(openingHolding)}` : ''}{openingOverpaid > 0 ? ` −${formatCurrency(openingOverpaid)}` : ''}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-xs text-red-700 mb-1">Out to meels</p>
-          <p className="text-2xl font-bold text-red-700">{formatCurrency(totalOut)}</p>
-          <p className="text-xs text-red-600 mt-0.5">{outbound.length} payment{outbound.length === 1 ? '' : 's'}</p>
+        <div className="order-2 lg:order-1 bg-green-50 border border-green-200 rounded-xl p-4">
+          <p className="text-xs text-green-700 mb-1 flex items-center gap-1"><ArrowDownCircle size={13} /> {t('saraf.inFromClients')}</p>
+          <p className="text-xl sm:text-2xl font-bold text-green-700">{formatCurrency(totalIn)}</p>
+          <p className="text-xs text-green-600 mt-0.5">{pmt(inbound.length)}</p>
         </div>
-        <div className={`rounded-xl p-4 border ${balanceCard.color}`}>
-          <p className="text-xs mb-1 opacity-80">{balanceCard.label}</p>
-          <p className="text-2xl font-bold">{formatCurrency(Math.abs(balance))}</p>
-          {(openingHolding > 0 || openingOverpaid > 0) && (
-            <p className="text-[11px] mt-1 opacity-70">
-              incl. opening{openingHolding > 0 ? ` +${formatCurrency(openingHolding)}` : ''}{openingOverpaid > 0 ? ` −${formatCurrency(openingOverpaid)}` : ''}
-            </p>
-          )}
+        <div className="order-3 lg:order-2 bg-red-50 border border-red-200 rounded-xl p-4">
+          <p className="text-xs text-red-700 mb-1 flex items-center gap-1"><ArrowUpCircle size={13} /> {t('saraf.outToMeels')}</p>
+          <p className="text-xl sm:text-2xl font-bold text-red-700">{formatCurrency(totalOut)}</p>
+          <p className="text-xs text-red-600 mt-0.5">{pmt(outbound.length)}</p>
         </div>
       </div>
 
-      {/* Balances by party — the heart of the generic Saraf view. Each row is
-          a counterparty (client or supplier) and their total flow through this
-          Saraf, so you can answer "what is sitting with Saraf for Test?" or
-          "how much has Saraf paid out to دانا سپلایر in total?" at a glance. */}
+      {/* Balances by party — answer "what is sitting with Saraf for X?" and
+          "how much has Saraf paid دانا سپلایر in total?" at a glance. */}
       {(clientBalances.length > 0 || supplierBalances.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
-            <div className="px-5 py-3 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-700 text-sm">Client / farm net balance with Saraf</h3>
-              <p className="text-xs text-slate-500 mt-0.5">In from them − Out paid on their behalf</p>
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-700 text-sm">{t('saraf.clientNetTitle')}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{t('saraf.clientNetSub')}</p>
             </div>
             {clientBalances.length === 0 ? (
-              <p className="text-center py-5 text-slate-400 text-sm">— no client activity yet —</p>
+              <p className="text-center py-5 text-slate-400 text-sm">{t('saraf.noClientActivity')}</p>
             ) : (
               <div className="divide-y divide-slate-50">
                 {clientBalances.map(c => {
                   const netColor = c.net > 0 ? 'text-amber-700' : c.net < 0 ? 'text-red-700' : 'text-emerald-700'
-                  const netLabel = c.net > 0 ? 'Saraf holds' : c.net < 0 ? 'Owes Saraf' : 'Settled'
+                  const netLabel = c.net > 0 ? t('saraf.sarafHolds') : c.net < 0 ? t('saraf.owesSaraf') : t('saraf.settled')
                   return (
-                    <div key={c.id} className="px-5 py-2.5 flex items-center justify-between text-sm gap-3">
+                    <div key={c.id} className="px-4 sm:px-5 py-2.5 flex items-center justify-between text-sm gap-3">
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-800 truncate">{c.name} {c.kind === 'client' && <span className="text-xs text-slate-400">· Client</span>}</p>
+                        <p className="font-medium text-slate-800 truncate">{c.name} {c.kind === 'client' && <span className="text-xs text-slate-400">· {t('saraf.client')}</span>}</p>
                         <p className="text-xs text-slate-500">
-                          {c.count_in > 0 && <span className="text-green-600">+{formatCurrency(c.in_total)} in</span>}
+                          {c.count_in > 0 && <span className="text-green-600">+{formatCurrency(c.in_total)} {t('saraf.inShort')}</span>}
                           {c.count_in > 0 && c.count_out > 0 && <span className="text-slate-400"> · </span>}
-                          {c.count_out > 0 && <span className="text-red-600">−{formatCurrency(c.out_total)} out</span>}
+                          {c.count_out > 0 && <span className="text-red-600">−{formatCurrency(c.out_total)} {t('saraf.outShort')}</span>}
                         </p>
                       </div>
                       <div className="text-end shrink-0">
@@ -214,19 +216,19 @@ export default function SarafDetail() {
           </div>
 
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
-            <div className="px-5 py-3 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-700 text-sm">Suppliers paid by Saraf</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Sum of every payment Saraf has released to them</p>
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-700 text-sm">{t('saraf.suppliersPaidTitle')}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{t('saraf.suppliersPaidSub')}</p>
             </div>
             {supplierBalances.length === 0 ? (
-              <p className="text-center py-5 text-slate-400 text-sm">— no supplier payouts yet —</p>
+              <p className="text-center py-5 text-slate-400 text-sm">{t('saraf.noSupplierPayouts')}</p>
             ) : (
               <div className="divide-y divide-slate-50">
                 {supplierBalances.map(s => (
-                  <div key={s.id} className="px-5 py-2.5 flex items-center justify-between text-sm">
+                  <div key={s.id} className="px-4 sm:px-5 py-2.5 flex items-center justify-between text-sm">
                     <div className="min-w-0">
                       <p className="font-medium text-slate-800 truncate">{s.name}</p>
-                      <p className="text-xs text-slate-500">{s.count} payment{s.count === 1 ? '' : 's'}</p>
+                      <p className="text-xs text-slate-500">{pmt(s.count)}</p>
                     </div>
                     <p className="font-bold text-red-700">{formatCurrency(s.total)}</p>
                   </div>
@@ -240,25 +242,25 @@ export default function SarafDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* IN from clients */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-              <ArrowDownCircle size={16} className="text-green-600" /> In from clients
+          <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm sm:text-base">
+              <ArrowDownCircle size={16} className="text-green-600 shrink-0" /> {t('saraf.inFromClients')}
             </h3>
-            <button onClick={openIn} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-              <Plus size={14} /> Record IN
+            <button onClick={openIn} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shrink-0">
+              <Plus size={14} /> {t('saraf.recordIn')}
             </button>
           </div>
           {inbound.length === 0 ? (
-            <p className="text-center py-8 text-slate-400 text-sm">No incoming payments yet</p>
+            <p className="text-center py-8 text-slate-400 text-sm">{t('saraf.noIncoming')}</p>
           ) : (
             <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
               {inbound.map(p => (
-                <div key={p.id} className="px-5 py-3 flex items-center gap-3">
+                <div key={p.id} className="px-4 sm:px-5 py-3 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 truncate">{lf(p.farms, 'name', lang) || '—'}</p>
                     {p.supplier_dispatches && (
                       <p className="text-xs text-slate-600 mt-0.5">
-                        → <span className="font-mono bg-blue-100 text-blue-700 px-1 rounded">Bill #{p.supplier_dispatches.bill_number || '—'}</span>
+                        → <span className="font-mono bg-blue-100 text-blue-700 px-1 rounded">{t('saraf.bill')} #{p.supplier_dispatches.bill_number || '—'}</span>
                         {p.supplier_dispatches.suppliers?.company_name && <span className="text-slate-500"> ({p.supplier_dispatches.suppliers.company_name})</span>}
                       </p>
                     )}
@@ -276,32 +278,32 @@ export default function SarafDetail() {
 
         {/* OUT to meels */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-              <ArrowUpCircle size={16} className="text-red-600" /> Out to meels
+          <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm sm:text-base">
+              <ArrowUpCircle size={16} className="text-red-600 shrink-0" /> {t('saraf.outToMeels')}
             </h3>
-            <button onClick={openOut} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-              <Plus size={14} /> Record OUT
+            <button onClick={openOut} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors shrink-0">
+              <Plus size={14} /> {t('saraf.recordOut')}
             </button>
           </div>
           {outbound.length === 0 ? (
-            <p className="text-center py-8 text-slate-400 text-sm">No outgoing payments yet</p>
+            <p className="text-center py-8 text-slate-400 text-sm">{t('saraf.noOutgoing')}</p>
           ) : (
             <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
               {outbound.map(p => (
-                <div key={p.id} className="px-5 py-3 flex items-center gap-3">
+                <div key={p.id} className="px-4 sm:px-5 py-3 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 truncate">{p.suppliers?.company_name || '—'}</p>
                     {(p.farms || p.supplier_dispatches) && (
                       <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1 flex-wrap">
                         {p.farms && (
                           <>
-                            <span className="text-slate-400">on behalf of</span>
+                            <span className="text-slate-400">{t('saraf.onBehalfOf')}</span>
                             <span className="font-medium text-emerald-700">{lf(p.farms, 'name', lang)}</span>
                           </>
                         )}
                         {p.supplier_dispatches && (
-                          <span className="font-mono bg-blue-100 text-blue-700 px-1 rounded">Bill #{p.supplier_dispatches.bill_number || '—'}</span>
+                          <span className="font-mono bg-blue-100 text-blue-700 px-1 rounded">{t('saraf.bill')} #{p.supplier_dispatches.bill_number || '—'}</span>
                         )}
                       </p>
                     )}
@@ -319,20 +321,20 @@ export default function SarafDetail() {
       </div>
 
       {/* IN modal */}
-      <Modal open={txModal === 'in'} onClose={() => setTxModal(null)} title="Record money IN from a client">
+      <Modal open={txModal === 'in'} onClose={() => setTxModal(null)} title={t('saraf.recordInTitle')}>
         <form onSubmit={submitIn} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">From client / farm *</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.fromClient')} *</label>
             <select required value={inForm.farm_id}
               onChange={e => setInForm(f => ({ ...f, farm_id: e.target.value, supplier_dispatch_id: '', amount: '' }))}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-              <option value="">— pick farm or client —</option>
-              {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)} ({f.kind === 'client' ? 'Client' : 'Farm'})</option>)}
+              <option value="">{t('saraf.pickFarmClient')}</option>
+              {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)} ({f.kind === 'client' ? t('saraf.client') : t('saraf.farm')})</option>)}
             </select>
           </div>
           {inForm.farm_id && (
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">For bill <span className="text-slate-400 font-normal">(optional)</span></label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.forBill')} <span className="text-slate-400 font-normal">({t('common.optional')})</span></label>
               <select value={inForm.supplier_dispatch_id}
                 onChange={e => {
                   const bill = clientBills.find(b => b.id === e.target.value)
@@ -343,21 +345,21 @@ export default function SarafDetail() {
                   }))
                 }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-                <option value="">— pick a bill —</option>
+                <option value="">{t('saraf.pickBill')}</option>
                 {clientBills.map(b => (
                   <option key={b.id} value={b.id}>
-                    Bill #{b.bill_number || '—'} · {b.suppliers?.company_name || 'meel'} · {b.quantity} bags · {formatCurrency(b.total_amount)}
+                    {t('saraf.bill')} #{b.bill_number || '—'} · {b.suppliers?.company_name || 'meel'} · {b.quantity} · {formatCurrency(b.total_amount)}
                   </option>
                 ))}
               </select>
               {clientBills.length === 0 && (
-                <p className="text-xs text-amber-700 mt-1">No bills written for this client yet.</p>
+                <p className="text-xs text-amber-700 mt-1">{t('saraf.noBillsForClient')}</p>
               )}
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Amount (AFN) *</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.amountAfn')} *</label>
               <input required type="number" min="0.01" step="0.01" value={inForm.amount}
                 onChange={e => setInForm(f => ({ ...f, amount: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
@@ -376,27 +378,27 @@ export default function SarafDetail() {
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setTxModal(null)} className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
             <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60">
-              {saving ? t('common.saving') : 'Record IN'}
+              {saving ? t('common.saving') : t('saraf.recordIn')}
             </button>
           </div>
         </form>
       </Modal>
 
       {/* OUT modal */}
-      <Modal open={txModal === 'out'} onClose={() => setTxModal(null)} title="Record money OUT to a meel supplier">
+      <Modal open={txModal === 'out'} onClose={() => setTxModal(null)} title={t('saraf.recordOutTitle')}>
         <form onSubmit={submitOut} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">To meel supplier *</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.toMeel')} *</label>
             <select required value={outForm.supplier_id}
               onChange={e => setOutForm(f => ({ ...f, supplier_id: e.target.value, supplier_dispatch_id: '', amount: '' }))}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-              <option value="">— pick a supplier —</option>
+              <option value="">{t('saraf.pickSupplier')}</option>
               {activeSuppliers.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Amount (AFN) *</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('saraf.amountAfn')} *</label>
               <input required type="number" min="0.01" step="0.01" value={outForm.amount}
                 onChange={e => setOutForm(f => ({ ...f, amount: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
@@ -415,7 +417,7 @@ export default function SarafDetail() {
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setTxModal(null)} className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
             <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60">
-              {saving ? t('common.saving') : 'Record OUT'}
+              {saving ? t('common.saving') : t('saraf.recordOut')}
             </button>
           </div>
         </form>
@@ -429,10 +431,8 @@ export default function SarafDetail() {
           else if (deleteTarget?.kind === 'out') await deleteOut(deleteTarget.row)
           setDeleteTarget(null)
         }}
-        title="Delete transaction?"
-        message={deleteTarget?.kind === 'in'
-          ? 'The payment will be removed and the client/farm debt will be restored.'
-          : 'The payment to the supplier will be removed.'}
+        title={t('saraf.deleteTxTitle')}
+        message={deleteTarget?.kind === 'in' ? t('saraf.deleteInMsg') : t('saraf.deleteOutMsg')}
       />
     </div>
   )
