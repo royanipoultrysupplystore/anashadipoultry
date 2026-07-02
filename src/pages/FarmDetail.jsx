@@ -17,6 +17,7 @@ import Modal from '../components/common/Modal'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import PhoneInput from '../components/common/PhoneInput'
 import WhatsAppPromptDialog from '../components/common/WhatsAppPromptDialog'
+import ClientStatementModal from '../components/common/ClientStatementModal'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate, todayStr } from '../utils/dateHelpers'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -97,6 +98,7 @@ export default function FarmDetail() {
   const [editDeathItem, setEditDeathItem] = useState(null)
   const [deathDeleteTarget, setDeathDeleteTarget] = useState(null)
   const [waPrompt, setWaPrompt] = useState(null)
+  const [statementOpen, setStatementOpen] = useState(false)
 
   useEffect(() => {
     getFarmById(id).then(data => {
@@ -489,6 +491,14 @@ export default function FarmDetail() {
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-100 text-orange-700 rounded-xl text-sm font-medium hover:bg-orange-200 transition-colors"
           >
             💬 Balance Reminder
+          </button>
+        )}
+        {isClient && (
+          <button
+            onClick={() => setStatementOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-teal-100 text-teal-700 rounded-xl text-sm font-medium hover:bg-teal-200 transition-colors"
+          >
+            <FileText size={16} /> Statement / صورتحساب
           </button>
         )}
       </div>
@@ -1198,6 +1208,15 @@ export default function FarmDetail() {
         variables={waPrompt?.variables}
         recipient={waPrompt?.recipient}
       />
+
+      {isClient && (
+        <ClientStatementModal
+          open={statementOpen}
+          onClose={() => setStatementOpen(false)}
+          farm={farm}
+          currentBalance={currentDebt}
+        />
+      )}
 
       {/* Dana Bill Modal (clients) */}
       <Modal open={danaBillModal} onClose={() => { setDanaBillModal(false); setEditDanaBill(null) }} title={editDanaBill ? t('danaBill.edit') : t('danaBill.write')}>

@@ -458,6 +458,36 @@ Remaining balance: {balance} AFN
 
 {store}`,
   },
+
+  // 16. Account statement for a date range (clients) — English + Pashto
+  client_statement: {
+    en:
+`Dear {name},
+
+Here is your account statement for {from} → {to}:
+
+{items_list}
+
+Total billed: {billed} AFN
+Total paid: {paid} AFN
+Current balance: {balance} AFN
+
+Thank you,
+{store}`,
+    ps:
+`محترم {name}،
+
+دا ستاسو د حساب صورت دی له {from} څخه تر {to} پورې:
+
+{items_list}
+
+ټول بل شوی: {billed} افغانۍ
+ټول تادیه شوی: {paid} افغانۍ
+اوسنی بیلانس: {balance} افغانۍ
+
+مننه،
+{store}`,
+  },
 }
 
 // Replace {placeholders} with values
