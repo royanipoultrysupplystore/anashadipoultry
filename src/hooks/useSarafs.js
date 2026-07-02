@@ -110,6 +110,7 @@ export function useSarafDetail(sarafId) {
     const amount = parseFloat(data.amount) || 0
     if (amount <= 0) { toast.error('Amount must be > 0'); return false }
     if (!data.farm_id) { toast.error('Pick a farm / client'); return false }
+    if (!data.hawala_number || !String(data.hawala_number).trim()) { toast.error('Transaction / hawala number is required'); return false }
     const { error } = await supabase.from('payments').insert([{
       farm_id: data.farm_id,
       amount,
@@ -117,6 +118,7 @@ export function useSarafDetail(sarafId) {
       notes: data.notes?.trim() || null,
       saraf_id: sarafId,
       supplier_dispatch_id: data.supplier_dispatch_id || null,
+      hawala_number: String(data.hawala_number).trim(),
     }])
     if (error) { toast.error(error.message); return false }
     const { data: f } = await supabase.from('farms').select('total_debt').eq('id', data.farm_id).single()
@@ -141,6 +143,7 @@ export function useSarafDetail(sarafId) {
       saraf_id: sarafId,
       supplier_dispatch_id: data.supplier_dispatch_id || null,
       farm_id: data.farm_id || null,
+      hawala_number: data.hawala_number?.trim() || null,
     }])
     if (error) { toast.error(error.message); return false }
     toast.success('Payment recorded')

@@ -11,6 +11,7 @@ import { useDispatches } from '../../hooks/useDispatches'
 import { usePayments } from '../../hooks/usePayments'
 import { useExpenses } from '../../hooks/useExpenses'
 import { useCashLedger } from '../../hooks/useCashLedger'
+import { useSarafs } from '../../hooks/useSarafs'
 import { useStoreCash } from '../../contexts/StoreCashContext'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { lf } from '../../utils/localizedField'
@@ -23,6 +24,7 @@ const TYPES = [
   { key: 'payment',  icon: '💵', label: 'Payment IN / پرداخت', sub: 'Money received from farm / client' },
   { key: 'expense',  icon: '🧾', label: 'Expense / مصرف',     sub: 'Money paid out for shop expenses' },
   { key: 'cash',     icon: '🤝', label: 'Cash Ledger / دفتر قرض', sub: 'Lend / borrow money to / from a person' },
+  { key: 'saraf',    icon: '🔁', label: 'Saraf / صراف',      sub: 'Record money IN / OUT via a Saraf' },
   { key: 'stock',    icon: '📦', label: 'Stock In / موجودی',  sub: 'Restock medicine or feed (opens Inventory)' },
 ]
 
@@ -41,6 +43,7 @@ const emptyBill = { farm_id: '', supplier_id: '', bill_number: '', dana_type: '9
 const emptyPay  = { farm_id: '', amount: '', date: todayStr(), notes: '' }
 const emptyExp  = { title: '', amount: '', category: 'other', date: todayStr(), notes: '' }
 const emptyCash  = { person_name: '', phone: '', amount: '', cashType: 'lent', date: todayStr(), notes: '' }
+const emptySaraf = { saraf_id: '', direction: 'in', farm_id: '', supplier_id: '', amount: '', hawala_number: '', date: todayStr(), notes: '' }
 const emptyStock = { product_id: '', quantity: '', purchase_price: '', batch_number: '', date: todayStr(), notes: '' }
 
 // Maps a Roznamcha feed entry._type to the modal's internal type key.
@@ -59,6 +62,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const { recordPayment, updatePayment } = usePayments()
   const { addExpense, updateExpense } = useExpenses()
   const { addTransaction: addCash, updateTransaction: updateCash } = useCashLedger()
+  const { sarafs } = useSarafs()
   const { recordIn, recordOut, removeByReference } = useStoreCash()
 
   const isEdit = !!editEntry
@@ -71,6 +75,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const [payForm,  setPayForm]  = useState(emptyPay)
   const [expForm,  setExpForm]  = useState(emptyExp)
   const [cashForm, setCashForm] = useState(emptyCash)
+  const [sarafForm, setSarafForm] = useState(emptySaraf)
   const [editDispatch, setEditDispatch] = useState(null) // full old dispatch (with items) for edits
 
   // Pre-fill the form when opening in edit mode.
@@ -116,6 +121,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     setPayForm({ ...emptyPay, date: todayStr() })
     setExpForm({ ...emptyExp, date: todayStr() })
     setCashForm({ ...emptyCash, date: todayStr() })
+    setSarafForm({ ...emptySaraf, date: todayStr() })
     setEditDispatch(null)
     setStoreCash(true)
     setType('dispatch')
@@ -294,6 +300,42 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
             ok = true
           }
         }
+      } else if (type === 'saraf') {
+        // Record money moving through a Saraf, straight into the same rows the
+        // Saraf page uses: IN = payments.saraf_id (+ reduces client debt),
+        // OUT = supplier_payments.saraf_id. Both land in the Roznamcha too.
+        if (!sarafForm.saraf_id) { toast.error('Pick a Saraf'); return }
+        const amt = parseFloat(sarafForm.amount) || 0
+        if (amt <= 0) { toast.error('Amount must be > 0'); return }
+        if (sarafForm.direction === 'in') {
+          if (!sarafForm.farm_id) { toast.error('Pick a client / farm'); return }
+          if (!sarafForm.hawala_number.trim()) { toast.error('Transaction / hawala number is required'); return }
+          const { error } = await supabase.from('payments').insert([{
+            farm_id: sarafForm.farm_id,
+            amount: amt,
+            payment_date: sarafForm.date,
+            notes: sarafForm.notes || null,
+            saraf_id: sarafForm.saraf_id,
+            hawala_number: sarafForm.hawala_number.trim(),
+          }])
+          if (error) { toast.error(error.message); return }
+          const { data: farm } = await supabase.from('farms').select('total_debt').eq('id', sarafForm.farm_id).single()
+          if (farm) await supabase.from('farms').update({ total_debt: Math.max(0, (farm.total_debt || 0) - amt) }).eq('id', sarafForm.farm_id)
+          ok = true
+        } else {
+          if (!sarafForm.supplier_id) { toast.error('Pick a meel supplier'); return }
+          const { error } = await supabase.from('supplier_payments').insert([{
+            supplier_id: sarafForm.supplier_id,
+            amount: amt,
+            amount_usd: 0,
+            payment_date: sarafForm.date,
+            notes: sarafForm.notes || null,
+            saraf_id: sarafForm.saraf_id,
+            hawala_number: sarafForm.hawala_number.trim() || null,
+          }])
+          if (error) { toast.error(error.message); return }
+          ok = true
+        }
       }
     } finally {
       setSaving(false)
@@ -314,7 +356,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   // Store-cash toggle is meaningless for dispatch / stock / bill — those flows
   // don't move money in or out of the shop's drawer (a Meel Bill settles via
   // the Saraf, not directly to Anas Hadi).
-  const showStoreCashBox = type !== 'dispatch' && type !== 'stock' && type !== 'bill'
+  const showStoreCashBox = type !== 'dispatch' && type !== 'stock' && type !== 'bill' && type !== 'saraf'
   const storeCashLabel = type === 'payment'
     ? t('storeCash.addToStoreCash')
     : type === 'expense'
@@ -331,7 +373,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Type selector — hidden in edit mode (the type can't change) */}
         {!isEdit && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
             {TYPES.map(tt => (
               <button
                 key={tt.key}
@@ -619,6 +661,96 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
             </div>
           </div>
         )}
+
+        {/* Saraf IN / OUT — records straight into the Saraf ledger + Roznamcha */}
+        {type === 'saraf' && (() => {
+          const meelSuppliers = suppliers.filter(s => (s.type || 'meel') === 'meel')
+          const isIn = sarafForm.direction === 'in'
+          return (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setSarafForm(f => ({ ...f, direction: 'in' }))}
+                  className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${isIn ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-600'}`}>
+                  ↘ Record IN / د ترلاسې ثبت
+                </button>
+                <button type="button" onClick={() => setSarafForm(f => ({ ...f, direction: 'out' }))}
+                  className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${!isIn ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-600'}`}>
+                  ↗ Record OUT / د ورکړې ثبت
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Saraf / صراف *</label>
+                <select required value={sarafForm.saraf_id} onChange={e => setSarafForm(f => ({ ...f, saraf_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                  <option value="">— pick a Saraf / صراف وټاکئ —</option>
+                  {sarafs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                {sarafs.length === 0 && (
+                  <p className="text-xs text-amber-700 mt-1">No sarafs yet — add one under Saraf first.</p>
+                )}
+              </div>
+              {isIn ? (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">From client / farm *</label>
+                  <select required value={sarafForm.farm_id} onChange={e => setSarafForm(f => ({ ...f, farm_id: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                    <option value="">— pick farm or client —</option>
+                    {activeClients.length > 0 && (
+                      <optgroup label="🏪 Clients / مشتریان">
+                        {activeClients.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
+                      </optgroup>
+                    )}
+                    {activeFarms.length > 0 && (
+                      <optgroup label="🏠 Farms / فارم‌ها">
+                        {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">To meel supplier *</label>
+                  <select required value={sarafForm.supplier_id} onChange={e => setSarafForm(f => ({ ...f, supplier_id: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                    <option value="">— pick a meel —</option>
+                    {meelSuppliers.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+                  </select>
+                  {meelSuppliers.length === 0 && (
+                    <p className="text-xs text-amber-700 mt-1">No meel suppliers yet — add one under Suppliers first.</p>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.amount')} (AFN) *</label>
+                  <input required type="number" min="0.01" step="0.01" value={sarafForm.amount}
+                    onChange={e => setSarafForm(f => ({ ...f, amount: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.date')}</label>
+                  <input type="date" value={sarafForm.date} onChange={e => setSarafForm(f => ({ ...f, date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Transaction # / حواله نمبر {isIn ? '*' : <span className="text-slate-400 font-normal">({t('common.optional')})</span>}
+                </label>
+                <input required={isIn} value={sarafForm.hawala_number}
+                  onChange={e => setSarafForm(f => ({ ...f, hawala_number: e.target.value }))}
+                  placeholder="e.g. 12345"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
+                <input value={sarafForm.notes} onChange={e => setSarafForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+              </div>
+              <p className="text-xs text-slate-400">This is recorded on the Saraf's ledger and appears in the Roznamcha. {isIn ? 'IN reduces the client’s remaining.' : 'OUT reduces the meel supplier’s remaining.'}</p>
+            </div>
+          )
+        })()}
 
         {/* Stock In — two shortcut buttons that jump to the Inventory page */}
         {type === 'stock' && (

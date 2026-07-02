@@ -32,7 +32,7 @@ export function useRoznamcha(date) {
       { data: farmBatches },
     ] = await Promise.all([
       supabase.from('dispatches').select('*, farms(name, name_fa, name_ps), dispatch_items(quantity, sell_price_at_time, total_amount, products(name))').eq('dispatch_date', date).order('created_at'),
-      supabase.from('payments').select('*, farms(name, name_fa, name_ps)').eq('payment_date', date).order('created_at'),
+      supabase.from('payments').select('*, farms(name, name_fa, name_ps), sarafs(name)').eq('payment_date', date).order('created_at'),
       supabase.from('sales').select('*').eq('sale_date', date).order('created_at'),
       supabase.from('supply_payments').select('*, farms(name, name_fa, name_ps)').eq('payment_date', date).order('created_at'),
       supabase.from('expenses').select('*').eq('expense_date', date).order('created_at'),
@@ -40,7 +40,7 @@ export function useRoznamcha(date) {
       // Inbound goods from suppliers
       supabase.from('supplier_dispatches').select('*, suppliers(company_name), farms(name, name_fa, name_ps)').eq('dispatch_date', date).order('created_at'),
       // Payments made to suppliers
-      supabase.from('supplier_payments').select('*, suppliers(company_name)').eq('payment_date', date).order('created_at'),
+      supabase.from('supplier_payments').select('*, suppliers(company_name), sarafs(name)').eq('payment_date', date).order('created_at'),
       // Chickens sent to market sellers
       supabase.from('market_transactions').select('*, farms(name, name_fa, name_ps), market_sellers(name)').eq('transaction_date', date).order('created_at'),
       // Cash received from market sellers

@@ -83,7 +83,11 @@ function EntryCard({ entry, onDelete, onEdit }) {
       break
     case 'payment':
       title = `${t('roznamcha.paymentFrom')} ${lf(entry.farms, 'name', lang) || '—'}`
-      detail = entry.notes || ''
+      detail = [
+        entry.sarafs?.name ? `🔁 ${entry.sarafs.name}` : '',
+        entry.hawala_number ? `حواله #${entry.hawala_number}` : '',
+        entry.notes || '',
+      ].filter(Boolean).join(' · ')
       amount = entry.amount || 0
       break
     case 'sale':
@@ -134,7 +138,11 @@ function EntryCard({ entry, onDelete, onEdit }) {
     }
     case 'supplier_payment':
       title = `${entry.suppliers?.company_name || '—'}`
-      detail = entry.notes || ''
+      detail = [
+        entry.sarafs?.name ? `🔁 ${entry.sarafs.name}` : '',
+        entry.hawala_number ? `حواله #${entry.hawala_number}` : '',
+        entry.notes || '',
+      ].filter(Boolean).join(' · ')
       amount = (entry.amount || 0) || (entry.amount_usd || 0)
       break
     case 'market_tx':

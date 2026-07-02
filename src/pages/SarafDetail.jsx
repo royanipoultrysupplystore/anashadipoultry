@@ -13,8 +13,8 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { lf } from '../utils/localizedField'
 import { SARAF_BI, bi } from '../utils/biLabels'
 
-const emptyIn = { farm_id: '', supplier_dispatch_id: '', amount: '', payment_date: todayStr(), notes: '' }
-const emptyOut = { supplier_id: '', supplier_dispatch_id: '', farm_id: '', amount: '', payment_date: todayStr(), notes: '' }
+const emptyIn = { farm_id: '', supplier_dispatch_id: '', amount: '', hawala_number: '', payment_date: todayStr(), notes: '' }
+const emptyOut = { supplier_id: '', supplier_dispatch_id: '', farm_id: '', amount: '', hawala_number: '', payment_date: todayStr(), notes: '' }
 
 export default function SarafDetail() {
   const { id } = useParams()
@@ -265,7 +265,10 @@ export default function SarafDetail() {
                         {p.supplier_dispatches.suppliers?.company_name && <span className="text-slate-500"> ({p.supplier_dispatches.suppliers.company_name})</span>}
                       </p>
                     )}
-                    <p className="text-xs text-slate-500">{formatDate(p.payment_date)}{p.notes ? ` · ${p.notes}` : ''}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 flex-wrap">
+                      {p.hawala_number && <span className="font-mono bg-violet-100 text-violet-700 px-1 rounded">{bi(SARAF_BI, 'hawalaShort')} #{p.hawala_number}</span>}
+                      <span>{formatDate(p.payment_date)}{p.notes ? ` · ${p.notes}` : ''}</span>
+                    </p>
                   </div>
                   <p className="font-bold text-green-700 shrink-0">{formatCurrency(p.amount)}</p>
                   <button onClick={() => setDeleteTarget({ kind: 'in', row: p })} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg shrink-0">
@@ -308,7 +311,10 @@ export default function SarafDetail() {
                         )}
                       </p>
                     )}
-                    <p className="text-xs text-slate-500">{formatDate(p.payment_date)}{p.notes ? ` · ${p.notes}` : ''}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 flex-wrap">
+                      {p.hawala_number && <span className="font-mono bg-violet-100 text-violet-700 px-1 rounded">{bi(SARAF_BI, 'hawalaShort')} #{p.hawala_number}</span>}
+                      <span>{formatDate(p.payment_date)}{p.notes ? ` · ${p.notes}` : ''}</span>
+                    </p>
                   </div>
                   <p className="font-bold text-red-700 shrink-0">{formatCurrency(p.amount)}</p>
                   <button onClick={() => setDeleteTarget({ kind: 'out', row: p })} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg shrink-0">
@@ -372,6 +378,12 @@ export default function SarafDetail() {
             </div>
           </div>
           <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{bi(SARAF_BI, 'hawala')} *</label>
+            <input required value={inForm.hawala_number} onChange={e => setInForm(f => ({ ...f, hawala_number: e.target.value }))}
+              placeholder="e.g. 12345"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
             <input value={inForm.notes} onChange={e => setInForm(f => ({ ...f, notes: e.target.value }))}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
@@ -409,6 +421,12 @@ export default function SarafDetail() {
               <input type="date" value={outForm.payment_date} onChange={e => setOutForm(f => ({ ...f, payment_date: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{bi(SARAF_BI, 'hawala')} <span className="text-slate-400 font-normal">({t('common.optional')})</span></label>
+            <input value={outForm.hawala_number} onChange={e => setOutForm(f => ({ ...f, hawala_number: e.target.value }))}
+              placeholder="e.g. 12345"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
