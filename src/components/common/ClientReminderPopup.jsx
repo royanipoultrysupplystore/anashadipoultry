@@ -7,6 +7,7 @@ import { useLanguage } from '../../contexts/LanguageContext'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { todayStr } from '../../utils/dateHelpers'
 import { lf } from '../../utils/localizedField'
+import { playNotificationSound } from '../../utils/notificationSound'
 import WhatsAppPromptDialog from './WhatsAppPromptDialog'
 
 // Live remaining for one client — same formula as useEntityDebts('client'),
@@ -40,6 +41,7 @@ export default function ClientReminderPopup() {
   useEffect(() => {
     let alive = true
     if (!active) { setRemaining(null); return }
+    playNotificationSound() // chime when a reminder comes due
     setRemaining(null)
     fetchClientRemaining(active.farm_id).then(v => { if (alive) setRemaining(v) })
     return () => { alive = false }
