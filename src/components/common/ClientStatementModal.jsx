@@ -89,7 +89,7 @@ export default function ClientStatementModal({ open, onClose, farm, currentBalan
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title={`📄 Statement / صورتحساب — ${name}`} size="xl">
+      <Modal open={open} onClose={onClose} title={`📄 Statement / د حساب صورت — ${name}`} size="xl">
         <div className="space-y-4">
           {/* Range picker */}
           <div className="flex flex-wrap items-end gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">

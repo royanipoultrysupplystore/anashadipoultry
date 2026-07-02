@@ -498,7 +498,7 @@ export default function FarmDetail() {
             onClick={() => setStatementOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-teal-100 text-teal-700 rounded-xl text-sm font-medium hover:bg-teal-200 transition-colors"
           >
-            <FileText size={16} /> Statement / صورتحساب
+            <FileText size={16} /> Statement / د حساب صورت
           </button>
         )}
       </div>
