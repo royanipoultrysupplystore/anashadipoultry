@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Phone, MapPin, Truck, CreditCard, Edit2, Plus, Trash2, FileText } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, Truck, CreditCard, Edit2, Plus, Trash2, FileText, Bell } from 'lucide-react'
 import { useFarms } from '../hooks/useFarms'
 import { useDispatches } from '../hooks/useDispatches'
 import { usePayments } from '../hooks/usePayments'
@@ -10,6 +10,7 @@ import { useMarketTransactions } from '../hooks/useMarketTransactions'
 import { useFarmBatches } from '../hooks/useFarmBatches'
 import { useSuppliers } from '../hooks/useSuppliers'
 import { useDanaBills } from '../hooks/useDanaBills'
+import { useFarmReminder } from '../hooks/useClientReminders'
 import { useBusinessInfo } from '../contexts/SettingsContext'
 import { printDanaBill } from '../utils/printDanaBill'
 import Modal from '../components/common/Modal'
@@ -58,6 +59,9 @@ export default function FarmDetail() {
   const { businessName } = useBusinessInfo()
   // Dana bills written from this client account (clients only).
   const { bills: danaBills, totalBilled: danaBillsTotal, createDanaBill, updateDanaBill, deleteDanaBill } = useDanaBills(id, { enabled: isClient })
+  // Client payment-reminder timer (clients only).
+  const { reminder, createReminder, cancelReminder } = useFarmReminder(isClient ? id : null)
+  const [reminderForm, setReminderForm] = useState({ value: '30', unit: 'days', note: '' })
 
   const [farm, setFarm] = useState(null)
   // Clients are broker bills only (no dispatches) → open on Payments.
@@ -488,6 +492,62 @@ export default function FarmDetail() {
           </button>
         )}
       </div>
+
+      {/* Payment reminder timer — clients only */}
+      {isClient && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+          <h3 className="font-semibold text-slate-700 flex items-center gap-2 mb-3">
+            <Bell size={16} className="text-amber-500" /> Payment reminder / د تادیې یادونه
+          </h3>
+          {reminder ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-amber-800">⏰ Reminder set for / یادونه ټاکل شوې د:</p>
+                <p className="text-sm text-amber-700 mt-0.5" dir="ltr">{new Date(reminder.remind_at).toLocaleString()}</p>
+                {reminder.note && <p className="text-xs text-slate-500 mt-0.5">📝 {reminder.note}</p>}
+              </div>
+              <button onClick={() => cancelReminder(reminder.id)} className="shrink-0 px-3 py-1.5 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50">
+                Cancel / لغوه
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={async e => {
+                e.preventDefault()
+                const n = parseFloat(reminderForm.value) || 0
+                if (n <= 0) { toast.error('Enter how long from now'); return }
+                const mult = reminderForm.unit === 'minutes' ? 60000 : reminderForm.unit === 'hours' ? 3600000 : 86400000
+                const remind_at = new Date(Date.now() + n * mult).toISOString()
+                const ok = await createReminder({ remind_at, note: reminderForm.note })
+                if (ok) setReminderForm({ value: '30', unit: 'days', note: '' })
+              }}
+              className="space-y-3"
+            >
+              <p className="text-xs text-slate-500">
+                Remind me to follow up on this client's balance after / ما ته یادونه وکړه چې د دې پیرودونکي بیلانس وروسته تعقیب کړم:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <input type="number" min="1" step="1" value={reminderForm.value}
+                  onChange={e => setReminderForm(f => ({ ...f, value: e.target.value }))}
+                  className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                <select value={reminderForm.unit} onChange={e => setReminderForm(f => ({ ...f, unit: e.target.value }))}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300">
+                  <option value="minutes">Minutes / دقیقې</option>
+                  <option value="hours">Hours / ساعتونه</option>
+                  <option value="days">Days / ورځې</option>
+                </select>
+                <button type="submit" className="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors">
+                  Set reminder / یادونه ټاکل
+                </button>
+              </div>
+              <input value={reminderForm.note} onChange={e => setReminderForm(f => ({ ...f, note: e.target.value }))}
+                placeholder="Note (optional) / یادونه (اختیاري)"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+              <p className="text-[11px] text-slate-400">When the time is up, a popup appears with this client's remaining balance and offers to send a WhatsApp reminder.</p>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* Dana Bills — clients write a meel bill that adds to their debt + the supplier's balance */}
       {isClient && (
