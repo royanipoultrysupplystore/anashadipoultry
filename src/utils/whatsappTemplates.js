@@ -9,7 +9,7 @@
 
 // Mutable store signature — set from SettingsContext once the business name loads.
 let storeNameEn = 'Anas Hadi Poultry Services'
-let storeNamePs = 'انس هادي مرغداري خدمات'
+let storeNamePs = 'انس هادي مرغداري خدمتونه'
 
 export function setStoreSignature(en, ps) {
   if (en) storeNameEn = en

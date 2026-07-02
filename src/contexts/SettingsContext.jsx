@@ -3,7 +3,7 @@ import { supabase } from '../config/supabase'
 import { setStoreSignature } from '../utils/whatsappTemplates'
 
 const DEFAULT_NAME = 'Anas Hadi Poultry Services'
-const DEFAULT_NAME_PS = 'انس هادي مرغداري خدمات'
+const DEFAULT_NAME_PS = 'انس هادي مرغداري خدمتونه'
 
 const SettingsContext = createContext({
   rate: 73,
