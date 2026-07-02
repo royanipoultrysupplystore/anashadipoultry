@@ -89,6 +89,7 @@ const translations = {
       supplyStore: 'Supply Store',
       remaining: 'remaining',
       received: 'rcvd',
+      update: 'Update',
     },
     saraf: {
       backToSarafs: 'Back to Sarafs',
@@ -1008,6 +1009,7 @@ const translations = {
       supplyStore: 'فروشگاه تدارکات',
       remaining: 'باقی',
       received: 'دریافت',
+      update: 'بروزرسانی',
     },
     saraf: {
       backToSarafs: 'صراف‌ګانو ته بیرته',
@@ -1928,6 +1930,7 @@ const translations = {
       supplyStore: 'د تدارکاتو دوکان',
       remaining: 'پاتې',
       received: 'ترلاسه',
+      update: 'اپدیت',
     },
     saraf: {
       backToSarafs: 'صراف‌ګانو ته بیرته',

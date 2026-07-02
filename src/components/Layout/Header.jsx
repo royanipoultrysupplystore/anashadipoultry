@@ -1,5 +1,7 @@
-import { Menu, Wallet } from 'lucide-react'
+import { useState } from 'react'
+import { Menu, Wallet, RefreshCw } from 'lucide-react'
 import { NavLink, Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { useBusinessInfo } from '../../contexts/SettingsContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -18,6 +20,28 @@ export default function Header({ onMenuClick, title }) {
   const { isAdmin } = useAuth()
   const { balance } = useStoreCash()
   const logoLetter = (businessName || '?').trim().charAt(0).toUpperCase()
+  const [updating, setUpdating] = useState(false)
+
+  // Force the app to fetch the freshly deployed version: drop any cached
+  // assets / service worker, then reload. Saves the user a manual hard-refresh.
+  async function handleUpdate() {
+    setUpdating(true)
+    toast.loading('Updating… / بروزرسانی', { id: 'app-update' })
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map(r => r.unregister()))
+      }
+      if (window.caches) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map(k => caches.delete(k)))
+      }
+    } catch { /* ignore — reload anyway */ }
+    // Cache-busting reload so index.html + hashed assets come fresh.
+    const u = new URL(window.location.href)
+    u.searchParams.set('_v', Date.now().toString())
+    window.location.replace(u.toString())
+  }
 
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-4 shadow-sm">
@@ -49,6 +73,18 @@ export default function Header({ onMenuClick, title }) {
             <span dir="ltr">{formatCurrency(balance)}</span>
           </NavLink>
         )}
+
+        {/* Update the app to the latest deployed version */}
+        <button
+          onClick={handleUpdate}
+          disabled={updating}
+          title="Update app / سیستم را بروز کنید"
+          aria-label="Update app"
+          className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#0F5257] transition-colors shrink-0 disabled:opacity-60"
+        >
+          <RefreshCw size={15} className={updating ? 'animate-spin' : ''} />
+          <span className="hidden sm:inline text-sm font-medium">{t('common.update')}</span>
+        </button>
 
         {/* Language selector */}
         <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden text-xs sm:text-sm font-medium shrink-0">
