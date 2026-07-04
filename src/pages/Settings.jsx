@@ -91,6 +91,12 @@ export default function Settings() {
       await supabase.from('supplier_dispatches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('supplier_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('choza_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      // Store cash drawer (keep the opening balance), reminders, batches, Saraf + market sub-tables
+      await supabase.from('cash_movements').delete().neq('source', 'opening')
+      await supabase.from('client_reminders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('farm_batches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('market_seller_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('market_transaction_expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       // Commission module — transactional data
       await supabase.from('commission_sales').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('commission_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
@@ -127,8 +133,16 @@ export default function Settings() {
       await supabase.from('choza_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('cash_ledger').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('chicken_deaths').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('market_seller_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('market_transaction_expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('market_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('market_sellers').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      // Store cash drawer, Saraf accounts, client reminders, chicken batches
+      // (standalone tables — nothing cascades to them, so wipe explicitly)
+      await supabase.from('cash_movements').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('client_reminders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('farm_batches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('sarafs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       // Commission module — children first, then parents
       await supabase.from('commission_sales').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('commission_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
