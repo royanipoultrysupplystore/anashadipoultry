@@ -108,6 +108,9 @@ export default function Settings() {
       await supabase.from('customers').update({ total_debt: 0, total_purchases: 0 }).neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('products').update({ quantity: 0 }).neq('id', '00000000-0000-0000-0000-000000000000')
       toast.success(t('settings.clearSuccess'))
+      // Reload so every cached context (store cash, lists…) refetches from the
+      // now-empty DB — otherwise the header keeps showing the old balance.
+      setTimeout(() => window.location.reload(), 700)
     } catch {
       toast.error(t('settings.error'))
     }
@@ -158,6 +161,9 @@ export default function Settings() {
       await supabase.from('products').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       await supabase.from('suppliers').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       toast.success(t('settings.clearSuccess'))
+      // Reload so every cached context (store cash, lists…) refetches from the
+      // now-empty DB — otherwise the header keeps showing the old balance.
+      setTimeout(() => window.location.reload(), 700)
     } catch {
       toast.error(t('settings.error'))
     }
