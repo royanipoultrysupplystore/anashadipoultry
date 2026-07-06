@@ -105,22 +105,50 @@ function AppShell() {
 }
 
 export default function App() {
-  // Global digit normalizer: any Arabic/Persian digit typed into an input or textarea
-  // is auto-converted to Western digits before React's onChange runs.
+  // Global digit normalizer: any Arabic/Persian digit typed or pasted into an input
+  // or textarea is converted to Western digits. We intercept `beforeinput` (which
+  // fires BEFORE the value updates) because type="number" inputs silently reject
+  // non-ASCII digits — so by the time `input` fires there's nothing left to convert.
   useEffect(() => {
-    function handleInput(e) {
-      const target = e.target
-      if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return
-      const original = target.value
-      if (!original) return
-      const normalized = normalizeDigits(original)
-      if (original === normalized) return
-      const proto = target instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype
-      const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
-      setter.call(target, normalized)
+    function setNativeValue(el, value) {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value)
     }
+    function handleBeforeInput(e) {
+      const el = e.target
+      if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return
+      let data = e.data
+      if (data == null && e.dataTransfer) { try { data = e.dataTransfer.getData('text') } catch { data = null } }
+      if (!data) return
+      const converted = normalizeDigits(data)
+      if (converted === data) return
+      e.preventDefault()
+      const start = el.selectionStart
+      const end = el.selectionEnd
+      if (start == null || end == null) {
+        setNativeValue(el, (el.value || '') + converted) // number inputs: no caret, append
+      } else {
+        const v = el.value
+        setNativeValue(el, v.slice(0, start) + converted + v.slice(end))
+        const pos = start + converted.length
+        try { el.setSelectionRange(pos, pos) } catch { /* number inputs */ }
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    // Safety net for anything that slips through (e.g. autofill into text inputs).
+    function handleInput(e) {
+      const el = e.target
+      if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return
+      if (!el.value) return
+      const normalized = normalizeDigits(el.value)
+      if (el.value !== normalized) setNativeValue(el, normalized)
+    }
+    document.addEventListener('beforeinput', handleBeforeInput, true)
     document.addEventListener('input', handleInput, true)
-    return () => document.removeEventListener('input', handleInput, true)
+    return () => {
+      document.removeEventListener('beforeinput', handleBeforeInput, true)
+      document.removeEventListener('input', handleInput, true)
+    }
   }, [])
 
   return (

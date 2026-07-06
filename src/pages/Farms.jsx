@@ -247,7 +247,7 @@ export default function Farms({ entityKind = 'farm' }) {
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
             <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-medium bg-[#0F5257] text-white rounded-lg hover:bg-[#14B8A6] disabled:opacity-60">
-              {saving ? t('common.saving') : editItem ? t('common.saveChanges') : t('farms.addFarm')}
+              {saving ? t('common.saving') : editItem ? t('common.saveChanges') : L.add}
             </button>
           </div>
         </form>
