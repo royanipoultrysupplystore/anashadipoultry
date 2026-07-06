@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { StoreCashProvider } from './contexts/StoreCashContext'
@@ -39,12 +39,26 @@ import CommissionFee from './pages/CommissionFee'
 import Users from './pages/Users'
 
 function AdminOnly({ children }) {
-  const { isAdmin } = useAuth()
-  return isAdmin ? children : <Navigate to="/commission" replace />
+  const { isAdmin, isEntity, entityHome } = useAuth()
+  if (isAdmin) return children
+  // Entity users are confined to their own account; associates go to Commission.
+  if (isEntity) return <Navigate to={entityHome || '/'} replace />
+  return <Navigate to="/commission" replace />
+}
+
+// A detail route reachable by an admin (any) OR by the entity user it belongs to
+// (matching entity_type + the :id in the URL). Everyone else is redirected home.
+function EntityOrAdmin({ kind, children }) {
+  const { isAdmin, isEntity, entityType, entityId, entityHome } = useAuth()
+  const { id } = useParams()
+  if (isAdmin) return children
+  if (isEntity && entityType === kind && entityId === id) return children
+  if (isEntity) return <Navigate to={entityHome || '/'} replace />
+  return <Navigate to="/commission" replace />
 }
 
 function AppShell() {
-  const { user, loading } = useAuth()
+  const { user, loading, entityHome } = useAuth()
 
   if (loading) {
     return (
@@ -56,8 +70,10 @@ function AppShell() {
 
   if (!user) return <Login />
 
-  // Associate users get redirected to /commission as their default landing
-  const homePath = user.role === 'associate' ? '/commission' : '/'
+  // Landing page by role: entity → their own account, associate → Commission, admin → dashboard
+  const homePath = user.role === 'entity'
+    ? (entityHome || '/')
+    : user.role === 'associate' ? '/commission' : '/'
 
   return (
     <Routes>
@@ -73,9 +89,9 @@ function AppShell() {
         <Route path="/pos" element={<AdminOnly><POS /></AdminOnly>} />
         <Route path="/inventory" element={<AdminOnly><Inventory /></AdminOnly>} />
         <Route path="/farms" element={<AdminOnly><Farms /></AdminOnly>} />
-        <Route path="/farms/:id" element={<AdminOnly><FarmDetail /></AdminOnly>} />
+        <Route path="/farms/:id" element={<EntityOrAdmin kind="farm"><FarmDetail /></EntityOrAdmin>} />
         <Route path="/clients" element={<AdminOnly><Farms entityKind="client" /></AdminOnly>} />
-        <Route path="/clients/:id" element={<AdminOnly><FarmDetail /></AdminOnly>} />
+        <Route path="/clients/:id" element={<EntityOrAdmin kind="client"><FarmDetail /></EntityOrAdmin>} />
         <Route path="/customers" element={<AdminOnly><WalkInCustomers /></AdminOnly>} />
         <Route path="/dispatches" element={<AdminOnly><Dispatches /></AdminOnly>} />
         <Route path="/dispatches/new" element={<AdminOnly><NewDispatch /></AdminOnly>} />
@@ -88,11 +104,11 @@ function AppShell() {
         <Route path="/suppliers" element={<AdminOnly><Suppliers /></AdminOnly>} />
         <Route path="/suppliers/medicine/:id" element={<AdminOnly><MedicineSupplierDetail /></AdminOnly>} />
         <Route path="/suppliers/choza/:id" element={<AdminOnly><ChozaSupplierDetail /></AdminOnly>} />
-        <Route path="/suppliers/:id" element={<AdminOnly><SupplierDetail /></AdminOnly>} />
+        <Route path="/suppliers/:id" element={<EntityOrAdmin kind="supplier"><SupplierDetail /></EntityOrAdmin>} />
         <Route path="/cash-ledger" element={<AdminOnly><CashLedger /></AdminOnly>} />
         <Route path="/cash-ledger/:slug" element={<AdminOnly><CashLedgerPersonDetail /></AdminOnly>} />
         <Route path="/sarafs" element={<AdminOnly><Sarafs /></AdminOnly>} />
-        <Route path="/sarafs/:id" element={<AdminOnly><SarafDetail /></AdminOnly>} />
+        <Route path="/sarafs/:id" element={<EntityOrAdmin kind="saraf"><SarafDetail /></EntityOrAdmin>} />
         <Route path="/store-cash" element={<AdminOnly><StoreCash /></AdminOnly>} />
         <Route path="/market" element={<AdminOnly><MarketSellers /></AdminOnly>} />
         <Route path="/market/:id" element={<AdminOnly><MarketSellerDetail /></AdminOnly>} />

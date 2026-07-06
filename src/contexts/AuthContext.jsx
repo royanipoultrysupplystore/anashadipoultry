@@ -49,9 +49,16 @@ export function AuthProvider({ children }) {
 
   const isAdmin = user?.role === 'admin'
   const isAssociate = user?.role === 'associate'
+  const isEntity = user?.role === 'entity'
+  const entityType = user?.entity_type || null
+  const entityId = user?.entity_id || null
+
+  // Where an entity user is confined to — their own detail page.
+  const ENTITY_BASE = { client: '/clients', farm: '/farms', supplier: '/suppliers', saraf: '/sarafs' }
+  const entityHome = isEntity && entityType && entityId ? `${ENTITY_BASE[entityType] || '/clients'}/${entityId}` : null
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, isAssociate }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, isAssociate, isEntity, entityType, entityId, entityHome }}>
       {children}
     </AuthContext.Provider>
   )

@@ -51,14 +51,17 @@ const SECTIONS = [
 
 export default function Sidebar({ open, onClose }) {
   const { t, isRTL } = useLanguage()
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, isEntity, entityHome } = useAuth()
   const { businessName } = useBusinessInfo()
   const logoLetter = (businessName || '?').trim().charAt(0).toUpperCase()
 
-  // For associates, keep only their allowed items; drop sections that end up empty.
-  const sections = SECTIONS
-    .map(s => ({ ...s, items: isAdmin ? s.items : s.items.filter(i => ASSOCIATE_PATHS.has(i.to)) }))
-    .filter(s => s.items.length > 0)
+  // Entity users only ever see their own account. Associates keep their allowed
+  // items; admins see everything.
+  const sections = isEntity
+    ? [{ title: null, items: [{ to: entityHome || '/', icon: Building2, label: 'My Account / زما حساب' }] }]
+    : SECTIONS
+        .map(s => ({ ...s, items: isAdmin ? s.items : s.items.filter(i => ASSOCIATE_PATHS.has(i.to)) }))
+        .filter(s => s.items.length > 0)
 
   const sideClass = `fixed top-0 ${isRTL ? 'right-0' : 'left-0'} h-full z-30 flex flex-col w-64 bg-gradient-to-b from-[#0C2E31] to-[#06191B] text-white transition-transform duration-300 ease-in-out ${
     open ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')
@@ -94,7 +97,7 @@ export default function Sidebar({ open, onClose }) {
                   {SIDEBAR_SECTION_BI[section.title] || section.title}
                 </div>
               )}
-              {section.items.map(({ to, icon: Icon, labelKey, highlight }) => (
+              {section.items.map(({ to, icon: Icon, labelKey, highlight, label }) => (
                 <NavLink
                   key={to}
                   to={to}
@@ -110,7 +113,7 @@ export default function Sidebar({ open, onClose }) {
                     <>
                       <span className={`absolute inset-y-1.5 start-0 w-0.5 rounded-full bg-[#2DD4BF] transition-opacity ${isActive ? 'opacity-100' : 'opacity-0'}`} />
                       <Icon size={18} className={isActive ? 'text-[#2DD4BF] shrink-0' : 'shrink-0'} />
-                      <span className="flex-1 truncate">{NAV_BI[labelKey] || t(labelKey)}</span>
+                      <span className="flex-1 truncate">{label || NAV_BI[labelKey] || t(labelKey)}</span>
                       {highlight && (
                         <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1.5 py-0.5 rounded-full font-bold tracking-wide">POS</span>
                       )}
