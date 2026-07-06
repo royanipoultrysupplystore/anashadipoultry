@@ -17,7 +17,7 @@ import Modal from '../components/common/Modal'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import PhoneInput from '../components/common/PhoneInput'
 import WhatsAppPromptDialog from '../components/common/WhatsAppPromptDialog'
-import ClientStatementModal from '../components/common/ClientStatementModal'
+import StatementModal from '../components/common/StatementModal'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate, todayStr } from '../utils/dateHelpers'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -1210,10 +1210,11 @@ export default function FarmDetail() {
       />
 
       {isClient && (
-        <ClientStatementModal
+        <StatementModal
           open={statementOpen}
           onClose={() => setStatementOpen(false)}
-          farm={farm}
+          kind="client"
+          entity={{ id, name: lf(farm, 'name', lang) || farm.name, phone: farm.phone }}
           currentBalance={currentDebt}
         />
       )}

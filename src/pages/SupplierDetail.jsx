@@ -7,6 +7,7 @@ import { printDanaBill } from '../utils/printDanaBill'
 import Modal from '../components/common/Modal'
 import ConfirmDialog from '../components/common/ConfirmDialog'
 import WhatsAppPromptDialog from '../components/common/WhatsAppPromptDialog'
+import StatementModal from '../components/common/StatementModal'
 import { formatCurrency } from '../utils/formatCurrency'
 import { formatDate, todayStr } from '../utils/dateHelpers'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -80,6 +81,7 @@ export default function SupplierDetail() {
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [waPrompt, setWaPrompt] = useState(null)
+  const [statementOpen, setStatementOpen] = useState(false)
   const [billSearch, setBillSearch] = useState('')
   const filteredDispatches = dispatches.filter(d => {
     if (!billSearch) return true
@@ -232,6 +234,12 @@ export default function SupplierDetail() {
           </p>
           {supplier.notes && <p className="text-xs text-slate-400 mt-0.5">{supplier.notes}</p>}
         </div>
+        <button
+          onClick={() => setStatementOpen(true)}
+          className="ms-auto flex items-center gap-2 px-4 py-2.5 bg-teal-100 text-teal-700 rounded-xl text-sm font-medium hover:bg-teal-200 transition-colors"
+        >
+          <FileText size={16} /> Statement / د حساب صورت
+        </button>
       </div>
 
       {/* Stats */}
@@ -618,6 +626,14 @@ export default function SupplierDetail() {
         templateKey={waPrompt?.templateKey}
         variables={waPrompt?.variables}
         recipient={waPrompt?.recipient}
+      />
+
+      <StatementModal
+        open={statementOpen}
+        onClose={() => setStatementOpen(false)}
+        kind="supplier"
+        entity={{ id, name: supplier.company_name, phone: supplier.phone }}
+        currentBalance={remaining}
       />
     </div>
   )

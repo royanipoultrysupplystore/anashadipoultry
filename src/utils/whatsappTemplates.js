@@ -488,6 +488,66 @@ Thank you,
 مننه،
 {store}`,
   },
+
+  // 17. Account statement for a meel supplier — English + Pashto
+  supplier_statement: {
+    en:
+`Dear {name},
+
+Here is your account statement with us for {from} → {to}:
+
+{items_list}
+
+Total billed: {billed} AFN
+Total paid: {paid} AFN
+Balance we owe you: {balance} AFN
+
+Thank you,
+{store}`,
+    ps:
+`محترم {name}،
+
+دا زموږ سره ستاسو د حساب صورت دی له {from} څخه تر {to} پورې:
+
+{items_list}
+
+ټول بل شوی: {billed} افغانۍ
+ټوله تادیه: {paid} افغانۍ
+هغه پور چې موږ يې درکوو: {balance} افغانۍ
+
+مننه،
+{store}`,
+  },
+
+  // 18. Account statement for a Saraf (money exchanger) — English + Pashto
+  saraf_statement: {
+    en:
+`Dear {name},
+
+Here is the Saraf account statement for {from} → {to}:
+
+{items_list}
+
+Total in: {inflow} AFN
+Total out: {outflow} AFN
+Currently holding: {holding} AFN
+
+Thank you,
+{store}`,
+    ps:
+`محترم {name}،
+
+دا د صراف د حساب صورت دی له {from} څخه تر {to} پورې:
+
+{items_list}
+
+ټول دننه: {inflow} افغانۍ
+ټول بهر: {outflow} افغانۍ
+اوس نزد صراف موجود: {holding} افغانۍ
+
+مننه،
+{store}`,
+  },
 }
 
 // Replace {placeholders} with values

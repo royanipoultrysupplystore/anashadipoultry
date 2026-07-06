@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Plus, Trash2, Repeat, ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plus, Trash2, Repeat, ArrowDownCircle, ArrowUpCircle, Wallet, FileText } from 'lucide-react'
 import { useSarafDetail } from '../hooks/useSarafs'
 import { useFarms } from '../hooks/useFarms'
 import { useSuppliers } from '../hooks/useSuppliers'
@@ -12,6 +12,7 @@ import { formatDate, todayStr } from '../utils/dateHelpers'
 import { useLanguage } from '../contexts/LanguageContext'
 import { lf } from '../utils/localizedField'
 import { SARAF_BI, bi } from '../utils/biLabels'
+import StatementModal from '../components/common/StatementModal'
 
 const emptyIn = { farm_id: '', supplier_dispatch_id: '', amount: '', hawala_number: '', payment_date: todayStr(), notes: '' }
 const emptyOut = { supplier_id: '', supplier_dispatch_id: '', farm_id: '', amount: '', hawala_number: '', payment_date: todayStr(), notes: '' }
@@ -29,6 +30,7 @@ export default function SarafDetail() {
   const [outForm, setOutForm] = useState(emptyOut)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null) // { kind:'in'|'out', row }
+  const [statementOpen, setStatementOpen] = useState(false)
 
   // Bills written for the selected client (IN form). Loaded on demand when the
   // modal opens or its client dropdown changes — keeps initial page fast.
@@ -150,6 +152,12 @@ export default function SarafDetail() {
             {saraf.location && <p className="text-sm text-slate-500">{saraf.location}</p>}
             {saraf.notes && <p className="text-sm text-slate-400 mt-1">{saraf.notes}</p>}
           </div>
+          <button
+            onClick={() => setStatementOpen(true)}
+            className="ms-auto shrink-0 flex items-center gap-2 px-4 py-2.5 bg-teal-100 text-teal-700 rounded-xl text-sm font-medium hover:bg-teal-200 transition-colors"
+          >
+            <FileText size={16} /> Statement / د حساب صورت
+          </button>
         </div>
       </div>
 
@@ -452,6 +460,14 @@ export default function SarafDetail() {
         }}
         title={bi(SARAF_BI, 'deleteTxTitle')}
         message={deleteTarget?.kind === 'in' ? bi(SARAF_BI, 'deleteInMsg') : bi(SARAF_BI, 'deleteOutMsg')}
+      />
+
+      <StatementModal
+        open={statementOpen}
+        onClose={() => setStatementOpen(false)}
+        kind="saraf"
+        entity={{ id, name: saraf.name, phone: saraf.phone }}
+        currentBalance={balance}
       />
     </div>
   )
