@@ -26,8 +26,10 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-[#0F5257] to-[#14B8A6] flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen relative flex items-center justify-center p-4 bg-cover bg-center" style={{ backgroundImage: "url('/chicken.webp')" }}>
+      {/* Teal overlay keeps the branding and card readable over the photo */}
+      <div className="absolute inset-0 bg-linear-to-br from-[#0F5257]/85 to-[#06191B]/90" />
+      <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-6">
           <div className="w-16 h-16 mx-auto bg-white rounded-2xl flex items-center justify-center text-[#0F5257] font-bold text-3xl shadow-lg mb-4">
             {logoLetter}
