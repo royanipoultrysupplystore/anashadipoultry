@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, Shield, User, UserCog, Building2 } from 'lucide-react'
+import { Plus, Trash2, Edit2, Shield, User, UserCog, Building2, Power } from 'lucide-react'
 import { supabase } from '../config/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/common/Modal'
@@ -17,7 +17,7 @@ const ENTITY_TYPES = [
 ]
 
 export default function Users() {
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, refreshOwnSessionVersion } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -25,6 +25,8 @@ export default function Users() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [signOutAllConfirm, setSignOutAllConfirm] = useState(false)
+  const [forceOutTarget, setForceOutTarget] = useState(null)
   // Entity option lists for the picker
   const [farmsList, setFarmsList] = useState([])
   const [suppliersList, setSuppliersList] = useState([])
@@ -108,6 +110,11 @@ export default function Users() {
       })
       if (error) { toast.error(error.message); setSaving(false); return }
       await supabase.from('app_users').update({ entity_type, entity_id }).eq('id', editItem.id)
+      // Changing the password invalidates that user's other open sessions.
+      if (form.password) {
+        await supabase.rpc('bump_session_version', { p_id: editItem.id })
+        if (editItem.id === currentUser.id) await refreshOwnSessionVersion() // keep this browser in
+      }
       toast.success('User updated')
     } else {
       const { data, error } = await supabase.rpc('add_user', {
@@ -128,6 +135,23 @@ export default function Users() {
     else { toast.success('User deleted'); await fetchUsers() }
   }
 
+  // Bump every user's session_version → all other browsers sign out within a
+  // minute. Re-sync our own version so this browser stays in.
+  async function doSignOutAll() {
+    const { error } = await supabase.rpc('bump_all_session_versions')
+    if (error) { toast.error(error.message); return }
+    await refreshOwnSessionVersion()
+    toast.success('Everyone will be signed out within 1 minute')
+  }
+
+  // Bump one user's session_version → their open sessions sign out within a minute.
+  async function doForceOut(u) {
+    const { error } = await supabase.rpc('bump_session_version', { p_id: u.id })
+    if (error) { toast.error(error.message); return }
+    if (u.id === currentUser.id) await refreshOwnSessionVersion()
+    toast.success('That user will be signed out within 1 minute')
+  }
+
   const roleBadge = (role) => role === 'admin'
     ? { cls: 'bg-purple-100 text-purple-700', icon: <Shield size={11} />, text: 'Admin' }
     : role === 'entity'
@@ -140,9 +164,14 @@ export default function Users() {
         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
           <UserCog size={22} className="text-[#0F5257]" /> Users & Access
         </h2>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6]">
-          <Plus size={16} /> Add User
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setSignOutAllConfirm(true)} className="flex items-center gap-2 px-4 py-2.5 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200">
+            <Power size={16} /> Sign out everyone
+          </button>
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-[#0F5257] text-white rounded-xl text-sm font-medium hover:bg-[#14B8A6]">
+            <Plus size={16} /> Add User
+          </button>
+        </div>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 space-y-1">
@@ -184,9 +213,10 @@ export default function Users() {
                       <td className="px-5 py-3 text-slate-500 text-xs">{formatDate(u.created_at)}</td>
                       <td className="px-5 py-3">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={() => openEdit(u)} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg"><Edit2 size={14} /></button>
+                          <button onClick={() => openEdit(u)} title="Edit" className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg"><Edit2 size={14} /></button>
+                          <button onClick={() => setForceOutTarget(u)} title="Force sign out" className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg"><Power size={14} /></button>
                           {u.id !== currentUser.id && (
-                            <button onClick={() => setDeleteTarget(u)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                            <button onClick={() => setDeleteTarget(u)} title="Delete" className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
                           )}
                         </div>
                       </td>
@@ -286,6 +316,24 @@ export default function Users() {
         title="Delete User"
         message={`Delete user "${deleteTarget?.name}"? They will no longer be able to log in.`}
         confirmLabel="Delete"
+      />
+
+      <ConfirmDialog
+        open={signOutAllConfirm}
+        onClose={() => setSignOutAllConfirm(false)}
+        onConfirm={doSignOutAll}
+        title="Sign out everyone"
+        message="Every user currently signed in on any device will be signed out within 1 minute. You (this browser) will stay signed in. Continue?"
+        confirmLabel="Sign out everyone"
+      />
+
+      <ConfirmDialog
+        open={!!forceOutTarget}
+        onClose={() => setForceOutTarget(null)}
+        onConfirm={() => doForceOut(forceOutTarget)}
+        title="Force sign out"
+        message={`"${forceOutTarget?.name}" will be signed out on every device within 1 minute. They can log back in with their existing password. Continue?`}
+        confirmLabel="Force sign out"
       />
     </div>
   )
