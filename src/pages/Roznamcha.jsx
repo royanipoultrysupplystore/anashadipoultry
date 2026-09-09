@@ -37,7 +37,7 @@ function formatDayLabel(dateStr) {
 
 // Types that can be edited in place via the QuickEntry modal. A dispatch is only
 // inline-editable when it has a single line item (the quick modal is single-product).
-const EDITABLE_TYPES = { dispatch: true, payment: true, expense: true, cash_ledger: true }
+const EDITABLE_TYPES = { dispatch: true, payment: true, expense: true, cash_ledger: true, supply: true }
 
 function EntryCard({ entry, onDelete, onEdit }) {
   const { t, lang } = useLanguage()

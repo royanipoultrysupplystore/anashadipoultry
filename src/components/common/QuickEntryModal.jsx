@@ -11,24 +11,30 @@ import { useDispatches } from '../../hooks/useDispatches'
 import { usePayments } from '../../hooks/usePayments'
 import { useExpenses } from '../../hooks/useExpenses'
 import { useCashLedger } from '../../hooks/useCashLedger'
+import { useSupplyPayments } from '../../hooks/useSupplyPayments'
 import { useSarafs } from '../../hooks/useSarafs'
 import { useStoreCash } from '../../contexts/StoreCashContext'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { lf } from '../../utils/localizedField'
 import { todayStr } from '../../utils/dateHelpers'
 import { formatCurrency } from '../../utils/formatCurrency'
+import { SUPPLY_ITEM_BI } from '../../utils/biLabels'
 
 const TYPES = [
   { key: 'dispatch', icon: '🚚', label: 'Dispatch / ارسال',   sub: 'Send items to a farm / client' },
   { key: 'bill',     icon: '📋', label: 'Meel Bill / بل دانه', sub: 'Write a Dana bill via a meel supplier' },
   { key: 'payment',  icon: '💵', label: 'Payment IN / پرداخت', sub: 'Money received from farm / client' },
   { key: 'expense',  icon: '🧾', label: 'Expense / مصرف',     sub: 'Money paid out for shop expenses' },
+  { key: 'supply',   icon: '🛍️', label: 'Supply / تدارکات',   sub: 'Supplies given to a farm (adds to debt)' },
   { key: 'cash',     icon: '🤝', label: 'Cash Ledger / دفتر قرض', sub: 'Lend / borrow money to / from a person' },
   { key: 'saraf',    icon: '🔁', label: 'Saraf / صراف',      sub: 'Record money IN / OUT via a Saraf' },
   { key: 'stock',    icon: '📦', label: 'Stock In / موجودی',  sub: 'Restock medicine or feed (opens Inventory)' },
 ]
 
 const EXPENSE_CATS = ['fuel', 'salary', 'rent', 'maintenance', 'utilities', 'other']
+
+// Mirrors SUPPLY_ITEMS in SupplyPayments.jsx — 'Other' lets a free-text item be typed.
+const SUPPLY_ITEMS = ['Sugar', 'Coal', 'Wood Flour', 'Other']
 
 const DANA_OPTIONS = [
   { value: '4_number',  labelKey: 'dana4Number' },
@@ -42,12 +48,13 @@ const emptyDisp = { farm_id: '', product_id: '', quantity: '1', sell_price: '', 
 const emptyBill = { farm_id: '', supplier_id: '', bill_number: '', dana_type: '9_number', quantity: '', price_per_bag: '', date: todayStr(), notes: '' }
 const emptyPay  = { farm_id: '', amount: '', date: todayStr(), notes: '' }
 const emptyExp  = { title: '', amount: '', category: 'other', date: todayStr(), notes: '' }
+const emptySupply = { farm_id: '', supply_item: 'Sugar', other_item: '', amount: '', date: todayStr(), notes: '' }
 const emptyCash  = { person_name: '', phone: '', amount: '', cashType: 'lent', date: todayStr(), notes: '' }
 const emptySaraf = { saraf_id: '', direction: 'in', farm_id: '', supplier_id: '', amount: '', hawala_number: '', date: todayStr(), notes: '' }
 const emptyStock = { product_id: '', quantity: '', purchase_price: '', batch_number: '', date: todayStr(), notes: '' }
 
 // Maps a Roznamcha feed entry._type to the modal's internal type key.
-const EDIT_TYPE_MAP = { dispatch: 'dispatch', payment: 'payment', expense: 'expense', cash_ledger: 'cash' }
+const EDIT_TYPE_MAP = { dispatch: 'dispatch', payment: 'payment', expense: 'expense', cash_ledger: 'cash', supply: 'supply' }
 
 // One unified "notebook" entry form: pick a type, fill a few fields,
 // and the right underlying record is created (+ cash drawer updated).
@@ -62,6 +69,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const { recordPayment, updatePayment } = usePayments()
   const { addExpense, updateExpense } = useExpenses()
   const { addTransaction: addCash, updateTransaction: updateCash } = useCashLedger()
+  const { addSupplyPayment, updateSupplyPayment } = useSupplyPayments()
   const { sarafs } = useSarafs()
   const { recordIn, recordOut, removeByReference } = useStoreCash()
 
@@ -75,6 +83,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const [payForm,  setPayForm]  = useState(emptyPay)
   const [expForm,  setExpForm]  = useState(emptyExp)
   const [cashForm, setCashForm] = useState(emptyCash)
+  const [supplyForm, setSupplyForm] = useState(emptySupply)
   const [sarafForm, setSarafForm] = useState(emptySaraf)
   const [editDispatch, setEditDispatch] = useState(null) // full old dispatch (with items) for edits
 
@@ -90,6 +99,17 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       setExpForm({ title: editEntry.title || '', amount: String(editEntry.amount ?? ''), category: editEntry.category || 'other', date: editEntry.expense_date || todayStr(), notes: editEntry.notes || '' })
     } else if (mt === 'cash') {
       setCashForm({ person_name: editEntry.person_name || '', phone: editEntry.phone || '', amount: String(editEntry.amount ?? ''), cashType: editEntry.type || 'lent', date: editEntry.transaction_date || todayStr(), notes: editEntry.note || '' })
+    } else if (mt === 'supply') {
+      // Anything not in the fixed list was typed via "Other".
+      const isCustom = !SUPPLY_ITEMS.slice(0, -1).includes(editEntry.supply_item)
+      setSupplyForm({
+        farm_id: editEntry.farm_id || '',
+        supply_item: isCustom ? 'Other' : editEntry.supply_item,
+        other_item: isCustom ? (editEntry.supply_item || '') : '',
+        amount: String(editEntry.amount ?? ''),
+        date: editEntry.payment_date || todayStr(),
+        notes: editEntry.notes || '',
+      })
     } else if (mt === 'dispatch') {
       ;(async () => {
         const { data } = await supabase.from('dispatches').select('*, dispatch_items(*)').eq('id', editEntry.id).single()
@@ -107,7 +127,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       })()
     }
     // Default the store-cash checkbox to whether a linked movement already exists.
-    if (mt === 'payment' || mt === 'expense' || mt === 'cash') {
+    if (mt === 'payment' || mt === 'expense' || mt === 'cash' || mt === 'supply') {
       ;(async () => {
         const { data } = await supabase.from('cash_movements').select('id').eq('reference_id', editEntry.id).limit(1)
         setStoreCash((data?.length || 0) > 0)
@@ -121,6 +141,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     setPayForm({ ...emptyPay, date: todayStr() })
     setExpForm({ ...emptyExp, date: todayStr() })
     setCashForm({ ...emptyCash, date: todayStr() })
+    setSupplyForm({ ...emptySupply, date: todayStr() })
     setSarafForm({ ...emptySaraf, date: todayStr() })
     setEditDispatch(null)
     setStoreCash(true)
@@ -267,6 +288,32 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
             ok = true
           }
         }
+      } else if (type === 'supply') {
+        if (!supplyForm.farm_id) { toast.error('Farm / client is required'); return }
+        const supplyItem = supplyForm.supply_item === 'Other' ? supplyForm.other_item.trim() : supplyForm.supply_item
+        if (!supplyItem) { toast.error('Supply item is required'); return }
+        const amt = parseFloat(supplyForm.amount) || 0
+        if (amt <= 0) { toast.error('Amount must be > 0'); return }
+        // The hook owns the farm-debt side effect (supplies are given on credit).
+        const payload = {
+          farm_id: supplyForm.farm_id, supply_item: supplyItem, amount: amt,
+          payment_date: supplyForm.date, notes: supplyForm.notes || null,
+        }
+        if (isEdit) {
+          ok = await updateSupplyPayment(editEntry.id, editEntry, payload)
+          if (ok) {
+            await removeByReference(editEntry.id)
+            if (storeCash) await recordOut({ amount: amt, source: 'supply_payment', reference_id: editEntry.id, note: supplyItem, date: supplyForm.date })
+          }
+        } else {
+          const result = await addSupplyPayment(payload)
+          if (result) {
+            if (storeCash) {
+              await recordOut({ amount: amt, source: 'supply_payment', reference_id: result.id, note: supplyItem, date: supplyForm.date })
+            }
+            ok = true
+          }
+        }
       } else if (type === 'cash') {
         if (!cashForm.person_name?.trim()) { toast.error('Person name is required'); return }
         const amt = parseFloat(cashForm.amount) || 0
@@ -359,12 +406,12 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const showStoreCashBox = type !== 'dispatch' && type !== 'stock' && type !== 'bill' && type !== 'saraf'
   const storeCashLabel = type === 'payment'
     ? t('storeCash.addToStoreCash')
-    : type === 'expense'
+    : type === 'expense' || type === 'supply'
     ? t('storeCash.fromStoreCash')
     : type === 'cash'
     ? (cashForm.cashType === 'lent' ? t('storeCash.fromStoreCash') : t('storeCash.addToStoreCash'))
     : ''
-  const storeCashColor = type === 'expense' || (type === 'cash' && cashForm.cashType === 'lent')
+  const storeCashColor = type === 'expense' || type === 'supply' || (type === 'cash' && cashForm.cashType === 'lent')
     ? 'bg-red-50 border-red-200 text-red-700'
     : 'bg-emerald-50 border-emerald-200 text-emerald-700'
 
@@ -373,7 +420,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Type selector — hidden in edit mode (the type can't change) */}
         {!isEdit && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             {TYPES.map(tt => (
               <button
                 key={tt.key}
@@ -611,6 +658,67 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
                 <input value={expForm.notes} onChange={e => setExpForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Supply fields */}
+        {type === 'supply' && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {t('supply.debtNote')}
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Supply to *</label>
+              <select required value={supplyForm.farm_id} onChange={e => setSupplyForm(f => ({ ...f, farm_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                <option value="">— pick farm or client —</option>
+                {activeFarms.length > 0 && (
+                  <optgroup label="🏠 Farms / فارم‌ها">
+                    {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
+                  </optgroup>
+                )}
+                {activeClients.length > 0 && (
+                  <optgroup label="🏪 Clients / مشتریان">
+                    {activeClients.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('supply.supplyItem')}</label>
+                <select value={supplyForm.supply_item} onChange={e => setSupplyForm(f => ({ ...f, supply_item: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                  {SUPPLY_ITEMS.map(it => <option key={it} value={it}>{SUPPLY_ITEM_BI[it] || it}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('supply.amountAFN')}</label>
+                <input required type="number" min="0.01" step="0.01" value={supplyForm.amount}
+                  onChange={e => setSupplyForm(f => ({ ...f, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+              </div>
+            </div>
+            {supplyForm.supply_item === 'Other' && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('supply.specifyItem')} *</label>
+                <input required value={supplyForm.other_item} onChange={e => setSupplyForm(f => ({ ...f, other_item: e.target.value }))}
+                  placeholder={t('supply.specifyPlaceholder')}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.date')}</label>
+                <input type="date" value={supplyForm.date} onChange={e => setSupplyForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('common.notes')}</label>
+                <input value={supplyForm.notes} onChange={e => setSupplyForm(f => ({ ...f, notes: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
               </div>
             </div>
