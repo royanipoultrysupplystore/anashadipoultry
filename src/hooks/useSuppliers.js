@@ -722,3 +722,95 @@ export function useChozaSupplierDetail(supplierId) {
     refetch: fetch,
   }
 }
+
+// Vaccine suppliers: same shape as the choza detail hook. A purchase is one
+// vaccine_transactions row (what we owe them); doses leave via dispatch_items
+// linked back to that lot, so remaining stock is bought minus dispatched.
+export function useVaccineSupplierDetail(supplierId) {
+  const { t } = useLanguage()
+  const [supplier, setSupplier] = useState(null)
+  const [transactions, setTransactions] = useState([])
+  const [payments, setPayments] = useState([])
+  const [dispatched, setDispatched] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const fetch = useCallback(async () => {
+    if (!supplierId) return
+    setLoading(true)
+    const [supplierRes, txRes, paymentRes] = await Promise.all([
+      supabase.from('suppliers').select('*').eq('id', supplierId).single(),
+      supabase.from('vaccine_transactions').select('*').eq('supplier_id', supplierId).order('transaction_date', { ascending: false }),
+      supabase.from('supplier_payments').select('*').eq('supplier_id', supplierId).order('payment_date', { ascending: false }),
+    ])
+    if (supplierRes.error) { toast.error(t('suppliers.loadFailed')); setLoading(false); return }
+
+    // Which doses have already gone out, and to whom.
+    const ids = (txRes.data || []).map(x => x.id)
+    let items = []
+    if (ids.length) {
+      const { data } = await supabase
+        .from('dispatch_items')
+        .select('vaccine_transaction_id, quantity, total_amount, dispatches(dispatch_date, farms(name, name_fa, name_ps))')
+        .in('vaccine_transaction_id', ids)
+      items = data || []
+    }
+
+    setSupplier(supplierRes.data)
+    setTransactions(txRes.data || [])
+    setPayments(paymentRes.data || [])
+    setDispatched(items)
+    setLoading(false)
+  }, [supplierId])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  async function recordPayment(data) {
+    const { data: inserted, error } = await supabase.from('supplier_payments').insert([{
+      supplier_id: supplierId,
+      amount: parseFloat(data.amount),
+      payment_date: data.payment_date,
+      notes: data.notes || null,
+    }]).select().single()
+    if (error) { toast.error(error.message); return false }
+    toast.success(t('suppliers.paymentRecorded'))
+    await fetch()
+    return inserted
+  }
+
+  async function deletePayment(id) {
+    const { error } = await supabase.from('supplier_payments').delete().eq('id', id)
+    if (error) { toast.error(error.message); return false }
+    toast.success(t('suppliers.paymentDeleted'))
+    await fetch()
+    return true
+  }
+
+  async function deleteTransaction(id) {
+    const { error } = await supabase.from('vaccine_transactions').delete().eq('id', id)
+    if (error) { toast.error(error.message); return false }
+    toast.success(t('suppliers.deleted'))
+    await fetch()
+    return true
+  }
+
+  const usedByLot = dispatched.reduce((acc, it) => {
+    acc[it.vaccine_transaction_id] = (acc[it.vaccine_transaction_id] || 0) + (it.quantity || 0)
+    return acc
+  }, {})
+  const lots = transactions.map(tx => ({ ...tx, remaining: (tx.quantity || 0) - (usedByLot[tx.id] || 0) }))
+
+  const openingBalance = parseFloat(supplier?.opening_balance) || 0
+  const totalInvested = transactions.reduce((s, tx) => s + (tx.total_amount || 0), 0)
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0)
+  const remaining = openingBalance + totalInvested - totalPaid
+  const totalDoses = transactions.reduce((s, tx) => s + (tx.quantity || 0), 0)
+  const dosesDispatched = dispatched.reduce((s, it) => s + (it.quantity || 0), 0)
+  const totalProfit = transactions.reduce((s, tx) => s + (tx.total_profit || 0), 0)
+
+  return {
+    supplier, transactions, lots, payments, dispatched, loading,
+    openingBalance, totalInvested, totalPaid, remaining,
+    totalDoses, dosesDispatched, dosesRemaining: totalDoses - dosesDispatched, totalProfit,
+    recordPayment, deletePayment, deleteTransaction, refetch: fetch,
+  }
+}

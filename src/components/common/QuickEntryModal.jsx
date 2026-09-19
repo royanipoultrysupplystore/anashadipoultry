@@ -12,6 +12,7 @@ import { usePayments } from '../../hooks/usePayments'
 import { useExpenses } from '../../hooks/useExpenses'
 import { useCashLedger } from '../../hooks/useCashLedger'
 import { useSupplyPayments } from '../../hooks/useSupplyPayments'
+import { useMeelBills } from '../../hooks/useMeelBills'
 import { useSarafs } from '../../hooks/useSarafs'
 import { useStoreCash } from '../../contexts/StoreCashContext'
 import { useLanguage } from '../../contexts/LanguageContext'
@@ -44,7 +45,80 @@ const DANA_OPTIONS = [
   { value: 'other',     labelKey: 'danaOther' },
 ]
 
-const emptyDisp = { farm_id: '', product_id: '', quantity: '1', sell_price: '', purchase_price: '', date: todayStr(), notes: '' }
+// choza_* fields only apply when the picked product is a choza (chick) product:
+// they tie the dispatched chicks to one supplier lot instead of the shared pool.
+// A new dispatch is either 'meel' (pick a supplier bill) or 'choza' (pick a
+// supplier lot); both derive the product from that choice, so the shared pooled
+// product rows stay out of the dispatch flow entirely.
+const emptyDisp = {
+  farm_id: '', disp_mode: 'meel', product_id: '', quantity: '1', sell_price: '', purchase_price: '',
+  date: todayStr(), notes: '',
+  choza_supplier_id: '', choza_source: 'existing', choza_lot_id: '', choza_type: '', choza_type_custom: '',
+  choza_subtype: '', choza_buy_count: '',
+  meel_supplier_id: '', meel_source: 'existing', meel_bill_id: '',
+  meel_product_name: '', meel_dana_type: '9_number', meel_bill_number: '', meel_buy_bags: '',
+  vac_supplier_id: '', vac_source: 'existing', vac_lot_id: '', vac_name: '', vac_name_custom: '', vac_buy_count: '',
+}
+// Sentinel for "the type I want isn't listed" in the choza type dropdown.
+const NEW_CHOZA_TYPE = '__new__'
+
+// The vaccines actually dispatched. Not exhaustive — "＋ New vaccine…" records
+// anything missing, and it then shows up here from the product rows.
+const VACCINE_NAMES = [
+  'Bio ND + IB Live',
+  'Bio IBD Live – Strain B87',
+  'Bio IBD W2512 Live',
+  'Bio IB H120 Live',
+  'Bio ND LaSota Live',
+  'Bio ND Clone 30 Live',
+  'Bio NDV Live – Strain HB1',
+  'Bio Multi IB Live',
+  'Bio ND + IB + AI Killed',
+  'Bio ND + AI Killed',
+  'Bio ND + IB + AI + IBD + AD Killed',
+]
+
+// One product row per vaccine, created on first use so Inventory keeps working.
+async function getOrCreateVaccineProduct(vaccineName, pricePerUnit) {
+  const { data: existing } = await supabase
+    .from('products').select('id, quantity').eq('name', vaccineName).eq('type', 'vaccine').limit(1)
+  if (existing && existing.length > 0) return existing[0]
+  const { data: created } = await supabase.from('products').insert([{
+    name: vaccineName, type: 'vaccine', unit: 'dose', quantity: 0,
+    purchase_price: pricePerUnit, sell_price: pricePerUnit, low_stock_threshold: 10,
+  }]).select().single()
+  return created
+}
+const emptyNewSupplier = { open: false, company_name: '', phone: '', saving: false }
+// Inline farm/client creation from the "Send to" picker. opening_balance carries
+// over what they already owed before this system — optional, 0 when there is none.
+const emptyNewEntity = { open: false, name: '', phone: '', kind: 'farm', opening_balance: '', saving: false }
+
+// Mirrors findOrCreateProduct in useSuppliers: a meel bill's product row.
+async function getOrCreateMeelProduct(productName, pricePerBag) {
+  const { data: existing } = await supabase
+    .from('products').select('id, quantity').eq('name', productName).eq('type', 'meel').limit(1)
+  if (existing && existing.length > 0) return existing[0]
+  const { data: created } = await supabase.from('products').insert([{
+    name: productName, type: 'meel', unit: 'bag', quantity: 0,
+    purchase_price: pricePerBag, sell_price: pricePerBag, low_stock_threshold: 10,
+  }]).select().single()
+  return created
+}
+
+// A choza type maps to one "Choza - <type>" product row (same convention as the
+// choza supplier page), created on first use so Inventory keeps working.
+async function getOrCreateChozaProduct(chozaType, pricePerChoza) {
+  const productName = `Choza - ${chozaType}`
+  const { data: existing } = await supabase
+    .from('products').select('id, quantity').eq('name', productName).eq('type', 'choza').limit(1)
+  if (existing && existing.length > 0) return existing[0]
+  const { data: created } = await supabase.from('products').insert([{
+    name: productName, type: 'choza', unit: 'chick', quantity: 0,
+    purchase_price: pricePerChoza, sell_price: pricePerChoza, low_stock_threshold: 100,
+  }]).select().single()
+  return created
+}
 const emptyBill = { farm_id: '', supplier_id: '', bill_number: '', dana_type: '9_number', quantity: '', price_per_bag: '', date: todayStr(), notes: '' }
 const emptyPay  = { farm_id: '', amount: '', date: todayStr(), notes: '' }
 const emptyExp  = { title: '', amount: '', category: 'other', date: todayStr(), notes: '' }
@@ -62,9 +136,10 @@ const EDIT_TYPE_MAP = { dispatch: 'dispatch', payment: 'payment', expense: 'expe
 export default function QuickEntryModal({ open, onClose, onCreated, editEntry = null }) {
   const navigate = useNavigate()
   const { t, lang } = useLanguage()
-  const { farms } = useFarms()
+  const { farms, addFarm } = useFarms()
   const { products, addStockPurchase } = useInventory()
-  const { suppliers } = useSuppliers()
+  const { suppliers, addSupplier } = useSuppliers()
+  const { meelBills } = useMeelBills()
   const { createDispatch, updateDispatch } = useDispatches()
   const { recordPayment, updatePayment } = usePayments()
   const { addExpense, updateExpense } = useExpenses()
@@ -86,6 +161,13 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const [supplyForm, setSupplyForm] = useState(emptySupply)
   const [sarafForm, setSarafForm] = useState(emptySaraf)
   const [editDispatch, setEditDispatch] = useState(null) // full old dispatch (with items) for edits
+  // Lots are tagged with the supplier they belong to, so a stale list is never
+  // shown while a newly picked supplier's lots are still loading.
+  const [chozaLotState, setChozaLotState] = useState({ supplierId: null, rows: [] })
+  const [vacLotState, setVacLotState] = useState({ supplierId: null, rows: [] })
+  const [lotsLoading, setLotsLoading] = useState(false)
+  const [newSupplier, setNewSupplier] = useState(emptyNewSupplier)
+  const [newEntity, setNewEntity] = useState(emptyNewEntity)
 
   // Pre-fill the form when opening in edit mode.
   useEffect(() => {
@@ -135,6 +217,146 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     }
   }, [open, editEntry])
 
+  // Load the picked choza supplier's lots, and how many chicks are left in each
+  // (bought minus already dispatched against that lot).
+  useEffect(() => {
+    const supplierId = dispForm.choza_supplier_id
+    if (!open || !supplierId) return
+    let cancelled = false
+    ;(async () => {
+      setLotsLoading(true)
+      const { data: lots } = await supabase
+        .from('choza_transactions')
+        .select('id, choza_type, afghani_subtype, price_per_choza, sale_price_per_choza, total_choza, transaction_date')
+        .eq('supplier_id', supplierId)
+        .order('transaction_date', { ascending: false })
+      const ids = (lots || []).map(l => l.id)
+      let used = []
+      if (ids.length) {
+        const { data } = await supabase
+          .from('dispatch_items')
+          .select('choza_transaction_id, quantity')
+          .in('choza_transaction_id', ids)
+        used = data || []
+      }
+      if (cancelled) return
+      setChozaLotState({
+        supplierId,
+        rows: (lots || []).map(l => ({
+          ...l,
+          remaining: (l.total_choza || 0) - used
+            .filter(u => u.choza_transaction_id === l.id)
+            .reduce((s, u) => s + (u.quantity || 0), 0),
+        })),
+      })
+      setLotsLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [open, dispForm.choza_supplier_id])
+
+  // Same as the choza lots above, for vaccine lots.
+  useEffect(() => {
+    const supplierId = dispForm.vac_supplier_id
+    if (!open || !supplierId) return
+    let cancelled = false
+    ;(async () => {
+      const { data: lots } = await supabase
+        .from('vaccine_transactions')
+        .select('id, vaccine_name, price_per_unit, sale_price_per_unit, quantity, transaction_date')
+        .eq('supplier_id', supplierId)
+        .order('transaction_date', { ascending: false })
+      const ids = (lots || []).map(l => l.id)
+      let used = []
+      if (ids.length) {
+        const { data } = await supabase
+          .from('dispatch_items').select('vaccine_transaction_id, quantity').in('vaccine_transaction_id', ids)
+        used = data || []
+      }
+      if (cancelled) return
+      setVacLotState({
+        supplierId,
+        rows: (lots || []).map(l => ({
+          ...l,
+          remaining: (l.quantity || 0) - used
+            .filter(u => u.vaccine_transaction_id === l.id)
+            .reduce((s, u) => s + (u.quantity || 0), 0),
+        })),
+      })
+    })()
+    return () => { cancelled = true }
+  }, [open, dispForm.vac_supplier_id])
+
+  function handleVacLotPick(lotId) {
+    const lot = vacLotState.rows.find(l => l.id === lotId)
+    setDispForm(f => ({
+      ...f,
+      vac_lot_id: lotId,
+      purchase_price: lot ? String(lot.price_per_unit ?? '') : f.purchase_price,
+      sell_price: lot?.sale_price_per_unit ? String(lot.sale_price_per_unit) : f.sell_price,
+    }))
+  }
+
+  // Picking a meel bill carries its product, buy price and sell price into the form.
+  function handleBillPick(billId) {
+    const b = meelBills.find(x => x.id === billId)
+    setDispForm(f => ({
+      ...f,
+      meel_bill_id: billId,
+      purchase_price: b ? String(b.price_per_bag ?? '') : f.purchase_price,
+      sell_price: b ? String(b.sell_price ?? '') : f.sell_price,
+    }))
+  }
+
+  // Picking a lot carries its buy price (and suggested sell price) into the form.
+  function handleLotPick(lotId) {
+    const lot = chozaLots.find(l => l.id === lotId)
+    setDispForm(f => ({
+      ...f,
+      choza_lot_id: lotId,
+      purchase_price: lot ? String(lot.price_per_choza ?? '') : f.purchase_price,
+      sell_price: lot?.sale_price_per_choza ? String(lot.sale_price_per_choza) : f.sell_price,
+    }))
+  }
+
+  async function handleCreateEntity() {
+    const name = newEntity.name.trim()
+    if (!name) { toast.error('Name is required'); return }
+    setNewEntity(s => ({ ...s, saving: true }))
+    const created = await addFarm({
+      name,
+      phone: newEntity.phone || null,
+      kind: newEntity.kind,
+      is_active: true,
+      opening_balance: Math.max(0, parseFloat(newEntity.opening_balance) || 0),
+    })
+    if (created) {
+      setNewEntity(emptyNewEntity)
+      setDispForm(f => ({ ...f, farm_id: created.id }))
+    } else {
+      setNewEntity(s => ({ ...s, saving: false }))
+    }
+  }
+
+  // kind is the suppliers.type the new row gets ('choza' | 'meel'); the created
+  // supplier is selected in whichever picker asked for it.
+  async function handleCreateSupplier(kind) {
+    const name = newSupplier.company_name.trim()
+    if (!name) { toast.error('Supplier name is required'); return }
+    setNewSupplier(s => ({ ...s, saving: true }))
+    const created = await addSupplier({ company_name: name, phone: newSupplier.phone || null, type: kind })
+    if (created) {
+      setNewSupplier(emptyNewSupplier)
+      // A brand new supplier has nothing on file yet, so jump to the "new" path.
+      setDispForm(f => {
+        if (kind === 'meel') return { ...f, meel_supplier_id: created.id, meel_bill_id: '', meel_source: 'new' }
+        if (kind === 'vaccine') return { ...f, vac_supplier_id: created.id, vac_lot_id: '', vac_source: 'new' }
+        return { ...f, choza_supplier_id: created.id, choza_lot_id: '', choza_source: 'new' }
+      })
+    } else {
+      setNewSupplier(s => ({ ...s, saving: false }))
+    }
+  }
+
   function reset() {
     setDispForm({ ...emptyDisp, date: todayStr() })
     setBillForm({ ...emptyBill, date: todayStr() })
@@ -144,6 +366,10 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     setSupplyForm({ ...emptySupply, date: todayStr() })
     setSarafForm({ ...emptySaraf, date: todayStr() })
     setEditDispatch(null)
+    setChozaLotState({ supplierId: null, rows: [] })
+    setVacLotState({ supplierId: null, rows: [] })
+    setNewSupplier(emptyNewSupplier)
+    setNewEntity(emptyNewEntity)
     setStoreCash(true)
     setType('dispatch')
   }
@@ -170,7 +396,9 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
 
     try {
       if (type === 'dispatch') {
-        if (!dispForm.farm_id || !dispForm.product_id) { toast.error('Pick an entity and a product'); return }
+        if (!dispForm.farm_id) { toast.error('Pick a farm or client'); return }
+        // In choza/meel mode the product is derived from the supplier lot or bill.
+        if (!isChoza && !isMeel && !isVaccine && !dispForm.product_id) { toast.error('Pick a product'); return }
         const qty = parseFloat(dispForm.quantity) || 0
         const sellPrice = parseFloat(dispForm.sell_price) || 0
         const total = qty * sellPrice
@@ -186,17 +414,162 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
               sell_price_at_time: sellPrice,
               purchase_price_at_time: parseFloat(dispForm.purchase_price) || 0,
               supplier_dispatch_id: oldItem?.supplier_dispatch_id || null,
+              choza_transaction_id: oldItem?.choza_transaction_id || null,
               batch_number: oldItem?.batch_number || null,
             }],
           )
         } else {
+          // A choza dispatch is tied to one supplier lot. "New purchase" writes the
+          // supplier-side choza_transaction (and stocks the pooled product) first,
+          // then dispatches straight out of that fresh lot.
+          let chozaLotId = null
+          let vaccineLotId = null
+          let supplierDispatchId = null
+          let productId = dispForm.product_id
+          if (isVaccine) {
+            if (!dispForm.vac_supplier_id) { toast.error('Pick a vaccine supplier'); return }
+            const buyPrice = parseFloat(dispForm.purchase_price) || 0
+            if (dispForm.vac_source === 'new') {
+              const name = (dispForm.vac_name === NEW_CHOZA_TYPE ? dispForm.vac_name_custom : dispForm.vac_name).trim()
+              if (!name) { toast.error('Vaccine is required'); return }
+              const bought = parseInt(dispForm.vac_buy_count, 10) || 0
+              if (bought <= 0) { toast.error('Doses purchased must be > 0'); return }
+              if (buyPrice <= 0) { toast.error('Buy price must be > 0'); return }
+              if (qty > bought) { toast.error('Cannot dispatch more doses than were purchased'); return }
+              const product = await getOrCreateVaccineProduct(name, buyPrice)
+              if (!product) { toast.error('Could not create the vaccine product'); return }
+              productId = product.id
+              const { data: lot, error: lotErr } = await supabase.from('vaccine_transactions').insert([{
+                supplier_id: dispForm.vac_supplier_id,
+                transaction_date: dispForm.date,
+                vaccine_name: name,
+                quantity: bought,
+                price_per_unit: buyPrice,
+                total_amount: bought * buyPrice,
+                sale_price_per_unit: sellPrice,
+                total_profit: (sellPrice - buyPrice) * bought,
+                notes: dispForm.notes || null,
+              }]).select().single()
+              if (lotErr) { toast.error(lotErr.message); return }
+              vaccineLotId = lot.id
+              const { data: prod } = await supabase.from('products').select('quantity').eq('id', productId).single()
+              await supabase.from('products')
+                .update({ quantity: (prod?.quantity || 0) + bought, purchase_price: buyPrice })
+                .eq('id', productId)
+            } else {
+              if (!dispForm.vac_lot_id || !selectedVacLot) { toast.error('Pick a vaccine lot'); return }
+              if (qty > selectedVacLot.remaining) {
+                toast.error(`Only ${selectedVacLot.remaining} doses left in that lot`)
+                return
+              }
+              const product = await getOrCreateVaccineProduct(selectedVacLot.vaccine_name, selectedVacLot.price_per_unit)
+              if (!product) { toast.error('Could not resolve the vaccine product'); return }
+              productId = product.id
+              vaccineLotId = dispForm.vac_lot_id
+            }
+          }
+          if (isMeel) {
+            // Meel already carries per-bill attribution via supplier_dispatch_id;
+            // the bill decides the product, buy price and remaining bags.
+            if (!dispForm.meel_supplier_id) { toast.error('Pick a meel supplier'); return }
+            if (dispForm.meel_source === 'new') {
+              const productName = dispForm.meel_product_name.trim()
+              if (!productName) { toast.error('Dana / product name is required'); return }
+              const bags = parseFloat(dispForm.meel_buy_bags) || 0
+              const buyPrice = parseFloat(dispForm.purchase_price) || 0
+              if (bags <= 0) { toast.error('Bags received must be > 0'); return }
+              if (buyPrice <= 0) { toast.error('Buy price must be > 0'); return }
+              if (qty > bags) { toast.error('Cannot dispatch more bags than were received'); return }
+              const product = await getOrCreateMeelProduct(productName, buyPrice)
+              if (!product) { toast.error('Could not create the meel product'); return }
+              productId = product.id
+              const { data: bill, error: billErr } = await supabase.from('supplier_dispatches').insert([{
+                supplier_id: dispForm.meel_supplier_id,
+                product_id: productId,
+                product_name: productName,
+                dispatch_date: dispForm.date,
+                quantity: bags,
+                price_per_bag: buyPrice,
+                sell_price_per_bag: sellPrice,
+                total_amount: bags * buyPrice,
+                bill_number: dispForm.meel_bill_number || null,
+                dana_type: dispForm.meel_dana_type || null,
+                notes: dispForm.notes || null,
+              }]).select().single()
+              if (billErr) { toast.error(billErr.message); return }
+              supplierDispatchId = bill.id
+              // Stock the received bags; createDispatch removes the dispatched part.
+              const { data: prod } = await supabase.from('products').select('quantity').eq('id', productId).single()
+              await supabase.from('products')
+                .update({ quantity: (prod?.quantity || 0) + bags, purchase_price: buyPrice })
+                .eq('id', productId)
+            } else {
+              if (!dispForm.meel_bill_id || !selectedBill) { toast.error('Pick a meel bill'); return }
+              if (qty > selectedBill.available) {
+                toast.error(`Only ${selectedBill.available} bags left on that bill`)
+                return
+              }
+              productId = selectedBill.product_id
+              supplierDispatchId = selectedBill.id
+            }
+          }
+          if (isChoza) {
+            if (!dispForm.choza_supplier_id) { toast.error('Pick a choza supplier'); return }
+            const buyPrice = parseFloat(dispForm.purchase_price) || 0
+            if (dispForm.choza_source === 'new') {
+              const chozaType = (dispForm.choza_type === NEW_CHOZA_TYPE
+                ? dispForm.choza_type_custom
+                : dispForm.choza_type).trim()
+              if (!chozaType) { toast.error('Choza type is required'); return }
+              const bought = parseInt(dispForm.choza_buy_count, 10) || 0
+              if (bought <= 0) { toast.error('Purchased count must be > 0'); return }
+              if (buyPrice <= 0) { toast.error('Buy price must be > 0'); return }
+              if (qty > bought) { toast.error('Cannot dispatch more chicks than were purchased'); return }
+              const product = await getOrCreateChozaProduct(chozaType, buyPrice)
+              if (!product) { toast.error('Could not create the choza product'); return }
+              productId = product.id
+              const { data: lot, error: lotErr } = await supabase.from('choza_transactions').insert([{
+                supplier_id: dispForm.choza_supplier_id,
+                transaction_date: dispForm.date,
+                choza_type: chozaType,
+                afghani_subtype: dispForm.choza_subtype || null,
+                price_per_choza: buyPrice,
+                total_choza: bought,
+                total_amount: bought * buyPrice,
+                sale_price_per_choza: sellPrice,
+                total_profit: (sellPrice - buyPrice) * bought,
+                notes: dispForm.notes || null,
+              }]).select().single()
+              if (lotErr) { toast.error(lotErr.message); return }
+              chozaLotId = lot.id
+              // Stock the whole purchase into the pooled product (Inventory/Dashboard
+              // read it); createDispatch then removes the dispatched part.
+              const { data: prod } = await supabase.from('products').select('quantity').eq('id', productId).single()
+              await supabase.from('products')
+                .update({ quantity: (prod?.quantity || 0) + bought, purchase_price: buyPrice })
+                .eq('id', productId)
+            } else {
+              if (!dispForm.choza_lot_id || !selectedLot) { toast.error('Pick a choza lot'); return }
+              if (qty > selectedLot.remaining) {
+                toast.error(`Only ${selectedLot.remaining} chicks left in that lot`)
+                return
+              }
+              const product = await getOrCreateChozaProduct(selectedLot.choza_type, selectedLot.price_per_choza)
+              if (!product) { toast.error('Could not resolve the choza product'); return }
+              productId = product.id
+              chozaLotId = dispForm.choza_lot_id
+            }
+          }
           ok = await createDispatch(
             { farm_id: dispForm.farm_id, dispatch_date: dispForm.date, total_amount: total, notes: dispForm.notes || null },
             [{
-              product_id: dispForm.product_id,
+              product_id: productId,
               quantity: qty,
               sell_price: sellPrice,
               purchase_price: parseFloat(dispForm.purchase_price) || 0,
+              choza_transaction_id: chozaLotId,
+              vaccine_transaction_id: vaccineLotId,
+              supplier_dispatch_id: supplierDispatchId,
             }],
           )
         }
@@ -398,6 +771,32 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const activeFarms = farms.filter(f => f.is_active && f.kind !== 'client')
   const activeClients = farms.filter(f => f.is_active && f.kind === 'client')
   const selectedProduct = products.find(p => p.id === dispForm.product_id)
+  // Choza mode is chosen explicitly, not inferred from the picked product.
+  const isChoza = dispForm.disp_mode === 'choza' && !isEdit
+  const isMeel = dispForm.disp_mode === 'meel' && !isEdit
+  const isVaccine = dispForm.disp_mode === 'vaccine' && !isEdit
+  const vaccineSuppliers = suppliers.filter(s => s.type === 'vaccine')
+  const vacLots = vacLotState.supplierId === dispForm.vac_supplier_id ? vacLotState.rows : []
+  const selectedVacLot = vacLots.find(l => l.id === dispForm.vac_lot_id)
+  // Known names = the canonical list plus anything already recorded as a product.
+  const knownVaccines = [...new Set([
+    ...VACCINE_NAMES,
+    ...products.filter(p => p.type === 'vaccine').map(p => p.name),
+  ])]
+  const dispatchableProducts = isEdit ? products : products.filter(p => p.type !== 'choza')
+  // Every meel supplier, not just those with bags left — a new bill can be written here.
+  const meelSuppliers = suppliers.filter(s => s.type === 'meel')
+    .map(s => ({ id: s.id, name: s.company_name }))
+  const supplierMeelBills = meelBills.filter(b => b.supplier_id === dispForm.meel_supplier_id)
+  const selectedBill = meelBills.find(b => b.id === dispForm.meel_bill_id)
+  // Existing choza types, read off the "Choza - <type>" product rows.
+  const knownChozaTypes = [...new Set(
+    products.filter(p => p.type === 'choza').map(p => p.name.replace(/^\s*Choza\s*-\s*/i, '').trim()).filter(Boolean),
+  )].sort()
+  const chozaSuppliers = suppliers.filter(s => s.type === 'choza')
+  const chozaLots = chozaLotState.supplierId === dispForm.choza_supplier_id ? chozaLotState.rows : []
+  const selectedLot = chozaLots.find(l => l.id === dispForm.choza_lot_id)
+  const buyingNewChoza = isChoza && dispForm.choza_source === 'new'
   const dispTotal = (parseFloat(dispForm.quantity) || 0) * (parseFloat(dispForm.sell_price) || 0)
 
   // Store-cash toggle is meaningless for dispatch / stock / bill — those flows
@@ -439,45 +838,445 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
         {/* Dispatch fields */}
         {type === 'dispatch' && (
           <div className="space-y-3">
+            {/* Choza starts from the supplier, everything else from the product */}
+            {!isEdit && (
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: 'meel', icon: '🌾', label: 'Meel / دانه', sub: 'pick a bill' },
+                  { key: 'choza', icon: '🐥', label: 'Choza / چوزه', sub: 'pick a supplier' },
+                  { key: 'vaccine', icon: '💉', label: 'Vaccine / واکسین', sub: 'pick a supplier' },
+                ].map(m => (
+                  <button key={m.key} type="button"
+                    onClick={() => setDispForm(f => ({ ...f, disp_mode: m.key, product_id: '', sell_price: '', purchase_price: '' }))}
+                    className={`px-3 py-2 rounded-xl border-2 text-sm font-medium ${dispForm.disp_mode === m.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
+                    <span className="me-1">{m.icon}</span>{m.label}
+                    <span className={`block text-[10px] ${dispForm.disp_mode === m.key ? 'text-white/70' : 'text-slate-400'}`}>{m.sub}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Send to *</label>
-              <select required disabled={isEdit} value={dispForm.farm_id} onChange={e => setDispForm(f => ({ ...f, farm_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 disabled:bg-slate-100 disabled:text-slate-500">
-                <option value="">— pick farm or client —</option>
-                {activeFarms.length > 0 && (
-                  <optgroup label="🏠 Farms / فارم‌ها">
-                    {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
-                  </optgroup>
+              <div className="flex gap-2">
+                <select required disabled={isEdit} value={dispForm.farm_id} onChange={e => setDispForm(f => ({ ...f, farm_id: e.target.value }))}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30 disabled:bg-slate-100 disabled:text-slate-500">
+                  <option value="">— pick farm or client —</option>
+                  {activeFarms.length > 0 && (
+                    <optgroup label="🏠 Farms / فارم‌ها">
+                      {activeFarms.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
+                    </optgroup>
+                  )}
+                  {activeClients.length > 0 && (
+                    <optgroup label="🏪 Clients / مشتریان">
+                      {activeClients.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+                {!isEdit && (
+                  <button type="button" onClick={() => setNewEntity(s => ({ ...s, open: !s.open }))}
+                    className="px-3 py-2 rounded-lg border-2 border-[#0F5257] text-[#0F5257] text-sm font-semibold whitespace-nowrap">
+                    {newEntity.open ? 'Cancel' : '＋ New'}
+                  </button>
                 )}
-                {activeClients.length > 0 && (
-                  <optgroup label="🏪 Clients / مشتریان">
-                    {activeClients.map(f => <option key={f.id} value={f.id}>{lf(f, 'name', lang)}</option>)}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Product *</label>
-              <select required value={dispForm.product_id} onChange={e => handleProductPick(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-                <option value="">— pick a product —</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} — {p.type} (stock: {p.quantity} {p.unit || ''})</option>
-                ))}
-              </select>
-              {selectedProduct && (
-                <p className="text-xs text-slate-400 mt-1">In stock: {selectedProduct.quantity} {selectedProduct.unit}</p>
+              </div>
+
+              {newEntity.open && !isEdit && (
+                <div className="mt-2 space-y-2 bg-white border border-slate-200 rounded-lg p-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {[{ key: 'farm', label: '🏠 Farm' }, { key: 'client', label: '🏪 Client' }].map(k => (
+                      <button key={k.key} type="button" onClick={() => setNewEntity(s => ({ ...s, kind: k.key }))}
+                        className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${newEntity.kind === k.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 text-slate-600'}`}>
+                        {k.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input value={newEntity.name} placeholder="Name *"
+                      onChange={e => setNewEntity(s => ({ ...s, name: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <input value={newEntity.phone} placeholder="Phone"
+                      onChange={e => setNewEntity(s => ({ ...s, phone: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">{t('farms.openingBalance')} (AFN)</label>
+                    <input type="number" min="0" step="0.01" value={newEntity.opening_balance} placeholder="0"
+                      onChange={e => setNewEntity(s => ({ ...s, opening_balance: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <p className="text-xs text-slate-500 mt-1">{t('farms.openingBalanceHelp')}</p>
+                  </div>
+                  <button type="button" disabled={newEntity.saving} onClick={handleCreateEntity}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0F5257] text-white text-sm font-semibold disabled:opacity-50">
+                    {newEntity.saving ? 'Saving…' : `Create ${newEntity.kind === 'client' ? 'client' : 'farm'}`}
+                  </button>
+                </div>
               )}
             </div>
+            {/* New dispatches always go through Meel or Choza; the raw product
+                picker survives only for editing an existing dispatch. */}
+            {isEdit && (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Product *</label>
+                <select required value={dispForm.product_id} onChange={e => handleProductPick(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                  <option value="">— pick a product —</option>
+                  {dispatchableProducts.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} — {p.type} (stock: {p.quantity} {p.unit || ''})</option>
+                  ))}
+                </select>
+                {selectedProduct && (
+                  <p className="text-xs text-slate-400 mt-1">In stock: {selectedProduct.quantity} {selectedProduct.unit}</p>
+                )}
+              </div>
+            )}
+
+            {/* Meel: dispatch bags out of a specific supplier bill */}
+            {isMeel && (
+              <div className="space-y-3 border border-lime-200 bg-lime-50/60 rounded-xl p-3">
+                <p className="text-xs font-semibold text-lime-800">🌾 Meel supplier / تأمین‌کننده دانه</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Supplier *</label>
+                  <div className="flex gap-2">
+                    <select value={dispForm.meel_supplier_id}
+                      onChange={e => setDispForm(f => ({ ...f, meel_supplier_id: e.target.value, meel_bill_id: '' }))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                      <option value="">— pick a meel supplier —</option>
+                      {meelSuppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => setNewSupplier(s => ({ ...s, open: !s.open }))}
+                      className="px-3 py-2 rounded-lg border-2 border-[#0F5257] text-[#0F5257] text-sm font-semibold whitespace-nowrap">
+                      {newSupplier.open ? 'Cancel' : '＋ New'}
+                    </button>
+                  </div>
+                </div>
+
+                {newSupplier.open && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                    <input value={newSupplier.company_name} placeholder="Supplier name *"
+                      onChange={e => setNewSupplier(s => ({ ...s, company_name: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <input value={newSupplier.phone} placeholder="Phone"
+                      onChange={e => setNewSupplier(s => ({ ...s, phone: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <button type="button" disabled={newSupplier.saving} onClick={() => handleCreateSupplier('meel')}
+                      className="px-3 py-2 rounded-lg bg-[#0F5257] text-white text-sm font-semibold disabled:opacity-50">
+                      {newSupplier.saving ? 'Saving…' : 'Create supplier'}
+                    </button>
+                  </div>
+                )}
+
+                {dispForm.meel_supplier_id && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ key: 'existing', label: 'From existing bill' }, { key: 'new', label: 'New bill' }].map(o => (
+                        <button key={o.key} type="button"
+                          onClick={() => setDispForm(f => ({ ...f, meel_source: o.key, meel_bill_id: '' }))}
+                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${dispForm.meel_source === o.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {dispForm.meel_source === 'existing' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Bill *</label>
+                        <select value={dispForm.meel_bill_id} onChange={e => handleBillPick(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                          <option value="">— pick a bill —</option>
+                          {supplierMeelBills.map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.product_name}{b.bill_number ? ` · #${b.bill_number}` : ''} · {b.available} bags left · buy {b.price_per_bag}
+                            </option>
+                          ))}
+                        </select>
+                        {supplierMeelBills.length === 0 && (
+                          <p className="text-xs text-lime-800 mt-1">No bill from this supplier has bags left — use “New bill”.</p>
+                        )}
+                        {selectedBill && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            Dispatching from this bill leaves {Math.max(0, selectedBill.available - (parseFloat(dispForm.quantity) || 0))} bags on it.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Dana / product name *</label>
+                          <input list="meel-products" value={dispForm.meel_product_name} placeholder="e.g. afghan safi"
+                            onChange={e => setDispForm(f => ({ ...f, meel_product_name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          <datalist id="meel-products">
+                            {products.filter(p => p.type === 'meel').map(p => <option key={p.id} value={p.name} />)}
+                          </datalist>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Dana Type / نوع دانه</label>
+                            <select value={dispForm.meel_dana_type}
+                              onChange={e => setDispForm(f => ({ ...f, meel_dana_type: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                              {DANA_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(`suppliers.${o.labelKey}`)}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Bill number</label>
+                            <input value={dispForm.meel_bill_number}
+                              onChange={e => setDispForm(f => ({ ...f, meel_bill_number: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Bags received *</label>
+                            <input type="number" min="1" step="0.01" value={dispForm.meel_buy_bags}
+                              onChange={e => setDispForm(f => ({ ...f, meel_buy_bags: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Buy price per bag (AFN) *</label>
+                            <input type="number" min="0" step="0.01" value={dispForm.purchase_price}
+                              onChange={e => setDispForm(f => ({ ...f, purchase_price: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500">This bill is added to the supplier’s account (what you owe them).</p>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Vaccine: same shape as choza — doses come out of one supplier lot */}
+            {isVaccine && (
+              <div className="space-y-3 border border-sky-200 bg-sky-50/60 rounded-xl p-3">
+                <p className="text-xs font-semibold text-sky-800">💉 Vaccine supplier / تأمین‌کننده واکسین</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Supplier *</label>
+                  <div className="flex gap-2">
+                    <select value={dispForm.vac_supplier_id}
+                      onChange={e => setDispForm(f => ({ ...f, vac_supplier_id: e.target.value, vac_lot_id: '' }))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                      <option value="">— pick a vaccine supplier —</option>
+                      {vaccineSuppliers.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => setNewSupplier(s => ({ ...s, open: !s.open }))}
+                      className="px-3 py-2 rounded-lg border-2 border-[#0F5257] text-[#0F5257] text-sm font-semibold whitespace-nowrap">
+                      {newSupplier.open ? 'Cancel' : '＋ New'}
+                    </button>
+                  </div>
+                </div>
+
+                {newSupplier.open && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                    <input value={newSupplier.company_name} placeholder="Supplier name *"
+                      onChange={e => setNewSupplier(s => ({ ...s, company_name: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <input value={newSupplier.phone} placeholder="Phone"
+                      onChange={e => setNewSupplier(s => ({ ...s, phone: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <button type="button" disabled={newSupplier.saving} onClick={() => handleCreateSupplier('vaccine')}
+                      className="px-3 py-2 rounded-lg bg-[#0F5257] text-white text-sm font-semibold disabled:opacity-50">
+                      {newSupplier.saving ? 'Saving…' : 'Create supplier'}
+                    </button>
+                  </div>
+                )}
+
+                {dispForm.vac_supplier_id && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ key: 'existing', label: 'From existing stock' }, { key: 'new', label: 'New purchase' }].map(o => (
+                        <button key={o.key} type="button"
+                          onClick={() => setDispForm(f => ({ ...f, vac_source: o.key, vac_lot_id: '' }))}
+                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${dispForm.vac_source === o.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {dispForm.vac_source === 'existing' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Vaccine lot *</label>
+                        <select value={dispForm.vac_lot_id} onChange={e => handleVacLotPick(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                          <option value="">— pick a lot —</option>
+                          {vacLots.map(l => (
+                            <option key={l.id} value={l.id}>
+                              {l.vaccine_name} · {l.remaining} left · buy {l.price_per_unit}
+                            </option>
+                          ))}
+                        </select>
+                        {vacLots.length === 0 && (
+                          <p className="text-xs text-sky-800 mt-1">No vaccine recorded for this supplier yet — use “New purchase”.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Vaccine *</label>
+                          <select value={dispForm.vac_name}
+                            onChange={e => setDispForm(f => ({ ...f, vac_name: e.target.value, vac_name_custom: '' }))}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                            <option value="">— pick a vaccine —</option>
+                            {knownVaccines.map(n => <option key={n} value={n}>{n}</option>)}
+                            <option value={NEW_CHOZA_TYPE}>＋ New vaccine…</option>
+                          </select>
+                        </div>
+                        {dispForm.vac_name === NEW_CHOZA_TYPE && (
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">New vaccine name *</label>
+                            <input value={dispForm.vac_name_custom}
+                              onChange={e => setDispForm(f => ({ ...f, vac_name_custom: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Doses purchased *</label>
+                            <input type="number" min="1" step="1" value={dispForm.vac_buy_count}
+                              onChange={e => setDispForm(f => ({ ...f, vac_buy_count: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Buy price per dose (AFN) *</label>
+                            <input type="number" min="0" step="0.01" value={dispForm.purchase_price}
+                              onChange={e => setDispForm(f => ({ ...f, purchase_price: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500">This purchase is added to the supplier’s account (what you owe them).</p>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Choza: attribute the chicks to one supplier lot rather than the shared pool */}
+            {isChoza && (
+              <div className="space-y-3 border border-amber-200 bg-amber-50/60 rounded-xl p-3">
+                <p className="text-xs font-semibold text-amber-800">🐥 Choza supplier / تأمین‌کننده چوزه</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Supplier *</label>
+                  <div className="flex gap-2">
+                    <select value={dispForm.choza_supplier_id}
+                      onChange={e => setDispForm(f => ({ ...f, choza_supplier_id: e.target.value, choza_lot_id: '' }))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                      <option value="">— pick a choza supplier —</option>
+                      {chozaSuppliers.map(s => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => setNewSupplier(s => ({ ...s, open: !s.open }))}
+                      className="px-3 py-2 rounded-lg border-2 border-[#0F5257] text-[#0F5257] text-sm font-semibold whitespace-nowrap">
+                      {newSupplier.open ? 'Cancel' : '＋ New'}
+                    </button>
+                  </div>
+                </div>
+
+                {newSupplier.open && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                    <input value={newSupplier.company_name} placeholder="Supplier name *"
+                      onChange={e => setNewSupplier(s => ({ ...s, company_name: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <input value={newSupplier.phone} placeholder="Phone"
+                      onChange={e => setNewSupplier(s => ({ ...s, phone: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <button type="button" disabled={newSupplier.saving} onClick={() => handleCreateSupplier('choza')}
+                      className="px-3 py-2 rounded-lg bg-[#0F5257] text-white text-sm font-semibold disabled:opacity-50">
+                      {newSupplier.saving ? 'Saving…' : 'Create supplier'}
+                    </button>
+                  </div>
+                )}
+
+                {dispForm.choza_supplier_id && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ key: 'existing', label: 'From existing stock' }, { key: 'new', label: 'New purchase' }].map(o => (
+                        <button key={o.key} type="button"
+                          onClick={() => setDispForm(f => ({ ...f, choza_source: o.key, choza_lot_id: '' }))}
+                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${dispForm.choza_source === o.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {dispForm.choza_source === 'existing' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Choza lot *</label>
+                        <select value={dispForm.choza_lot_id} onChange={e => handleLotPick(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                          <option value="">{lotsLoading ? 'loading lots…' : '— pick a lot —'}</option>
+                          {chozaLots.map(l => (
+                            <option key={l.id} value={l.id}>
+                              {l.choza_type}{l.afghani_subtype ? ` (${l.afghani_subtype})` : ''} · {l.remaining} left · buy {l.price_per_choza}
+                            </option>
+                          ))}
+                        </select>
+                        {!lotsLoading && chozaLots.length === 0 && (
+                          <p className="text-xs text-amber-700 mt-1">No choza recorded for this supplier yet — use “New purchase”.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Choza type *</label>
+                          <select value={dispForm.choza_type}
+                            onChange={e => setDispForm(f => ({ ...f, choza_type: e.target.value, choza_type_custom: '' }))}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                            <option value="">— pick a choza type —</option>
+                            {knownChozaTypes.map(n => <option key={n} value={n}>{n}</option>)}
+                            <option value={NEW_CHOZA_TYPE}>＋ New type…</option>
+                          </select>
+                        </div>
+                        {dispForm.choza_type === NEW_CHOZA_TYPE && (
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">New choza type *</label>
+                            <input value={dispForm.choza_type_custom} placeholder="e.g. Irani, Afghani"
+                              onChange={e => setDispForm(f => ({ ...f, choza_type_custom: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Chicks purchased *</label>
+                            <input type="number" min="1" step="1" value={dispForm.choza_buy_count}
+                              onChange={e => setDispForm(f => ({ ...f, choza_buy_count: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Subtype</label>
+                            <input value={dispForm.choza_subtype} placeholder="e.g. Afghani grade"
+                              onChange={e => setDispForm(f => ({ ...f, choza_subtype: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Buy price per choza (AFN) *</label>
+                      <input type="number" min="0" step="0.01" value={dispForm.purchase_price}
+                        onChange={e => setDispForm(f => ({ ...f, purchase_price: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                      <p className="text-xs text-slate-500 mt-1">
+                        {buyingNewChoza
+                          ? 'This purchase is added to the supplier’s account (what you owe them).'
+                          : 'Taken from the picked lot — change it only if this dispatch was priced differently.'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Quantity *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{isChoza ? 'Chicks to dispatch *' : isMeel ? 'Bags to dispatch *' : isVaccine ? 'Doses to dispatch *' : 'Quantity *'}</label>
                 <input required type="number" min="0.01" step="0.01" value={dispForm.quantity}
                   onChange={e => setDispForm(f => ({ ...f, quantity: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Sell price (AFN) *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{isChoza ? 'Sell price per choza (AFN) *' : isMeel ? 'Sell price per bag (AFN) *' : isVaccine ? 'Sell price per dose (AFN) *' : 'Sell price (AFN) *'}</label>
                 <input required type="number" min="0" step="0.01" value={dispForm.sell_price}
                   onChange={e => setDispForm(f => ({ ...f, sell_price: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />

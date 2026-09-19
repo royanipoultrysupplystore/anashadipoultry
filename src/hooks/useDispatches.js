@@ -12,7 +12,7 @@ export function useDispatches(farmId = null) {
     setLoading(true)
     let query = supabase
       .from('dispatches')
-      .select(`*, farms(name, name_fa, name_ps), dispatch_items(*, products(name, unit), supplier_dispatches(bill_number, dana_type, suppliers(company_name)))`)
+      .select(`*, farms(name, name_fa, name_ps), dispatch_items(*, products(name, unit, type), supplier_dispatches(bill_number, dana_type, suppliers(company_name)))`)
       .order('dispatch_date', { ascending: false })
     if (farmId) query = query.eq('farm_id', farmId)
     const { data, error } = await query
@@ -51,6 +51,9 @@ export function useDispatches(farmId = null) {
       // Link to the specific supplier dispatch (meel bill) the bags came out of,
       // so per-supplier remaining stock can be computed accurately.
       supplier_dispatch_id: item.supplier_dispatch_id || null,
+      // Same idea for choza: which supplier lot these chicks came out of.
+      choza_transaction_id: item.choza_transaction_id || null,
+      vaccine_transaction_id: item.vaccine_transaction_id || null,
       batch_number: item.batch_number || null,
       quantity: item.quantity,
       purchase_price_at_time: item.purchase_price,
@@ -122,6 +125,8 @@ export function useDispatches(farmId = null) {
           // Preserve the supplier_dispatch_id from the original row so per-supplier
           // remaining stock stays accurate after an edit.
           supplier_dispatch_id: item.supplier_dispatch_id || null,
+          choza_transaction_id: item.choza_transaction_id || null,
+          vaccine_transaction_id: item.vaccine_transaction_id || null,
           batch_number: item.batch_number || null,
           quantity: qty,
           purchase_price_at_time: buyPrice,

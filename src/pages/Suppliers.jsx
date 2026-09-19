@@ -13,6 +13,7 @@ const TABS = [
   { key: 'meel',     labelKey: 'meelSuppliers',     icon: '🌾', iconColor: 'text-[#0F5257]', bgColor: 'bg-[#0F5257]/10' },
   { key: 'medicine', labelKey: 'medicineSuppliers',  icon: '💊', iconColor: 'text-blue-600',   bgColor: 'bg-blue-100' },
   { key: 'choza',    labelKey: 'chozaSuppliers',     icon: '🐥', iconColor: 'text-amber-600',  bgColor: 'bg-amber-100' },
+  { key: 'vaccine',  labelKey: 'vaccineSuppliers',   icon: '💉', iconColor: 'text-sky-600',    bgColor: 'bg-sky-100' },
 ]
 
 function getTabConfig(type) {
@@ -24,7 +25,7 @@ export default function Suppliers() {
   const { suppliers, loading, addSupplier, updateSupplier, deleteSupplier } = useSuppliers()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const activeTab = ['meel', 'medicine', 'choza'].includes(tabParam) ? tabParam : 'meel'
+  const activeTab = ['meel', 'medicine', 'choza', 'vaccine'].includes(tabParam) ? tabParam : 'meel'
   function setActiveTab(tab) {
     setSearchParams({ tab })
   }
@@ -65,12 +66,14 @@ export default function Suppliers() {
   function getProfileLink(s) {
     if (s.type === 'medicine') return `/suppliers/medicine/${s.id}`
     if (s.type === 'choza') return `/suppliers/choza/${s.id}`
+    if (s.type === 'vaccine') return `/suppliers/vaccine/${s.id}`
     return `/suppliers/${s.id}`
   }
 
   function getAddLabel() {
     if (activeTab === 'medicine') return t('suppliers.addMedicineSupplier')
     if (activeTab === 'choza') return t('suppliers.addChozaSupplier')
+    if (activeTab === 'vaccine') return t('suppliers.addVaccineSupplier')
     return t('suppliers.addSupplier')
   }
 

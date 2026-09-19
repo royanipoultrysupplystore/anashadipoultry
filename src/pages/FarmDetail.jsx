@@ -76,6 +76,7 @@ export default function FarmDetail() {
   const [payForm, setPayForm] = useState({ amount: '', payment_date: todayStr(), notes: '' })
   const [payToStoreCash, setPayToStoreCash] = useState(true)
   const [advanceModal, setAdvanceModal] = useState(false)
+  const [vaccineModal, setVaccineModal] = useState(false)
   const [advanceForm, setAdvanceForm] = useState({ amount: '', payment_date: todayStr(), notes: '' })
   const [advanceToStoreCash, setAdvanceToStoreCash] = useState(true)
   const [applyAdvanceModal, setApplyAdvanceModal] = useState(false)
@@ -356,6 +357,16 @@ export default function FarmDetail() {
   const openingBalance = parseFloat(farm.opening_balance) || 0
   const currentDebt = Math.max(0, openingBalance + totalDispatched + (isClient ? 0 : totalSupplyOut) + chickenDebt + danaBillsTotal - totalPaid)
   const totalProfit = dispatches.flatMap(d => d.dispatch_items || []).reduce((s, i) => s + (i.total_profit || 0), 0)
+  // Vaccine lines are ordinary dispatch items, so their value is ALREADY inside
+  // totalDispatched (and therefore currentDebt). This is a breakdown of that
+  // figure, never an addition to it.
+  const vaccineItems = dispatches.flatMap(d =>
+    (d.dispatch_items || [])
+      .filter(i => i.vaccine_transaction_id || i.products?.type === 'vaccine')
+      .map(i => ({ ...i, dispatch_date: d.dispatch_date, invoice_number: d.invoice_number })),
+  )
+  const vaccineTotal = vaccineItems.reduce((s, i) => s + (i.total_amount || 0), 0)
+  const vaccineDoses = vaccineItems.reduce((s, i) => s + (i.quantity || 0), 0)
   const netProfit = totalProfit - parseFloat(subsidy || 0)
 
   const TABS = isClient ? [
@@ -412,6 +423,16 @@ export default function FarmDetail() {
           <p className="text-xs font-medium text-slate-500 mb-1">{t('farmDetail.totalPaid')}</p>
           <p className="text-2xl font-bold text-green-700">{formatCurrency(totalPaid)}</p>
         </div>
+        {vaccineItems.length > 0 && (
+          <div
+            onClick={() => setVaccineModal(true)}
+            className="bg-sky-50 rounded-xl p-4 border border-sky-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+          >
+            <p className="text-xs font-medium text-slate-500 mb-1">💉 Vaccine / واکسین</p>
+            <p className="text-2xl font-bold text-sky-700">{formatCurrency(vaccineTotal)}</p>
+            <p className="text-[11px] text-slate-400 mt-1">{vaccineDoses} doses · tap for detail</p>
+          </div>
+        )}
         {openingBalance > 0 && (
           <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
             <p className="text-xs font-medium text-slate-500 mb-1">{t('farms.openingBalance')}</p>
@@ -990,6 +1011,49 @@ export default function FarmDetail() {
       </Modal>
 
       {/* Advance Payment Modal */}
+      <Modal open={vaccineModal} onClose={() => setVaccineModal(false)} title="💉 Vaccine / واکسین" size="lg">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-sky-50 border border-sky-200 rounded-xl p-3">
+              <p className="text-xs text-slate-500 mb-1">Total billed</p>
+              <p className="text-xl font-bold text-sky-700">{formatCurrency(vaccineTotal)}</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-3">
+              <p className="text-xs text-slate-500 mb-1">Doses</p>
+              <p className="text-xl font-bold text-slate-800">{vaccineDoses}</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            This amount is part of the farm's current debt, not extra. Payments are not split by
+            category, so what is still owed specifically on vaccines cannot be shown separately.
+          </p>
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-500 text-xs">
+                <tr>
+                  <th className="px-3 py-2 text-start">{t('common.date')}</th>
+                  <th className="px-3 py-2 text-start">Vaccine</th>
+                  <th className="px-3 py-2 text-start">Doses</th>
+                  <th className="px-3 py-2 text-start">Price</th>
+                  <th className="px-3 py-2 text-start">{t('common.total')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {vaccineItems.map((i, idx) => (
+                  <tr key={idx}>
+                    <td className="px-3 py-2 text-slate-500 text-xs">{formatDate(i.dispatch_date)}</td>
+                    <td className="px-3 py-2 font-medium text-slate-800">{i.products?.name || '—'}</td>
+                    <td className="px-3 py-2">{i.quantity}</td>
+                    <td className="px-3 py-2">{formatCurrency(i.sell_price_at_time)}</td>
+                    <td className="px-3 py-2 font-semibold">{formatCurrency(i.total_amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={advanceModal} onClose={() => setAdvanceModal(false)} title={t('farmDetail.addAdvance')}>
         <form onSubmit={handleAdvancePayment} className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">

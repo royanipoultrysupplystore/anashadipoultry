@@ -29,6 +29,9 @@ export default defineConfig({
         // App shell: precache built JS/CSS/HTML/fonts/icons so the app loads
         // instantly on phone and continues to render UI even if the network drops.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
+        // The app is one bundle and it passed workbox's 2 MiB default, which fails
+        // the build outright. Raised so the shell stays fully precached.
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Supabase API calls are intentionally NOT cached — finances must be live.
         // Anything else from the same origin (the built app shell) is precached above.
         navigateFallback: '/index.html',
