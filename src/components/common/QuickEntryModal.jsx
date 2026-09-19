@@ -1065,6 +1065,11 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                       {newSupplier.open ? 'Cancel' : '＋ New'}
                     </button>
                   </div>
+                  {vaccineSuppliers.length === 0 && (
+                    <p className="text-xs text-sky-800 mt-1">
+                      No vaccine supplier yet — tap <span className="font-semibold">＋ New</span> to add one, then pick the vaccine.
+                    </p>
+                  )}
                 </div>
 
                 {newSupplier.open && (
@@ -1170,6 +1175,11 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                       {newSupplier.open ? 'Cancel' : '＋ New'}
                     </button>
                   </div>
+                  {chozaSuppliers.length === 0 && (
+                    <p className="text-xs text-amber-800 mt-1">
+                      No choza supplier yet — tap <span className="font-semibold">＋ New</span> to add one, then pick the choza type.
+                    </p>
+                  )}
                 </div>
 
                 {newSupplier.open && (
