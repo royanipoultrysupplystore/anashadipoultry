@@ -54,6 +54,7 @@ export function useDispatches(farmId = null) {
       // Same idea for choza: which supplier lot these chicks came out of.
       choza_transaction_id: item.choza_transaction_id || null,
       vaccine_transaction_id: item.vaccine_transaction_id || null,
+      stock_purchase_id: item.stock_purchase_id || null,
       batch_number: item.batch_number || null,
       quantity: item.quantity,
       purchase_price_at_time: item.purchase_price,
@@ -127,6 +128,7 @@ export function useDispatches(farmId = null) {
           supplier_dispatch_id: item.supplier_dispatch_id || null,
           choza_transaction_id: item.choza_transaction_id || null,
           vaccine_transaction_id: item.vaccine_transaction_id || null,
+          stock_purchase_id: item.stock_purchase_id || null,
           batch_number: item.batch_number || null,
           quantity: qty,
           purchase_price_at_time: buyPrice,

@@ -58,6 +58,7 @@ const emptyDisp = {
   meel_supplier_id: '', meel_source: 'existing', meel_bill_id: '',
   meel_product_name: '', meel_dana_type: '9_number', meel_bill_number: '', meel_buy_bags: '',
   vac_supplier_id: '', vac_source: 'existing', vac_lot_id: '', vac_name: '', vac_name_custom: '', vac_buy_count: '',
+  med_supplier_id: '', med_source: 'existing', med_lot_id: '', med_name: '', med_name_custom: '', med_unit: '', med_buy_count: '',
 }
 // Sentinel for "the type I want isn't listed" in the choza type dropdown.
 const NEW_CHOZA_TYPE = '__new__'
@@ -77,6 +78,18 @@ const VACCINE_NAMES = [
   'Bio ND + AI Killed',
   'Bio ND + IB + AI + IBD + AD Killed',
 ]
+
+// Medicine keeps its own product rows; a new name is created on first use.
+async function getOrCreateMedicineProduct(name, price, unit) {
+  const { data: existing } = await supabase
+    .from('products').select('id, quantity').eq('name', name).eq('type', 'medicine').limit(1)
+  if (existing && existing.length > 0) return existing[0]
+  const { data: created } = await supabase.from('products').insert([{
+    name, type: 'medicine', unit: unit || 'unit', quantity: 0,
+    purchase_price: price, sell_price: price, low_stock_threshold: 10,
+  }]).select().single()
+  return created
+}
 
 // One product row per vaccine, created on first use so Inventory keeps working.
 async function getOrCreateVaccineProduct(vaccineName, pricePerUnit) {
@@ -165,6 +178,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   // shown while a newly picked supplier's lots are still loading.
   const [chozaLotState, setChozaLotState] = useState({ supplierId: null, rows: [] })
   const [vacLotState, setVacLotState] = useState({ supplierId: null, rows: [] })
+  const [medLotState, setMedLotState] = useState({ supplierId: null, rows: [] })
   const [lotsLoading, setLotsLoading] = useState(false)
   const [newSupplier, setNewSupplier] = useState(emptyNewSupplier)
   const [newEntity, setNewEntity] = useState(emptyNewEntity)
@@ -286,6 +300,50 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     return () => { cancelled = true }
   }, [open, dispForm.vac_supplier_id])
 
+  // Medicine lots: a stock_purchases row, minus whatever has been dispatched off it.
+  useEffect(() => {
+    const supplierId = dispForm.med_supplier_id
+    if (!open || !supplierId) return
+    let cancelled = false
+    ;(async () => {
+      const { data: lots } = await supabase
+        .from('stock_purchases')
+        .select('id, product_id, quantity, purchase_price, purchase_date, batch_number, products(name, unit, sell_price, type)')
+        .eq('supplier_id', supplierId)
+        .order('purchase_date', { ascending: false })
+      const ids = (lots || []).map(l => l.id)
+      let used = []
+      if (ids.length) {
+        const { data } = await supabase
+          .from('dispatch_items').select('stock_purchase_id, quantity').in('stock_purchase_id', ids)
+        used = data || []
+      }
+      if (cancelled) return
+      setMedLotState({
+        supplierId,
+        rows: (lots || [])
+          .filter(l => l.products?.type === 'medicine')
+          .map(l => ({
+            ...l,
+            remaining: (l.quantity || 0) - used
+              .filter(u => u.stock_purchase_id === l.id)
+              .reduce((sum, u) => sum + (u.quantity || 0), 0),
+          })),
+      })
+    })()
+    return () => { cancelled = true }
+  }, [open, dispForm.med_supplier_id])
+
+  function handleMedLotPick(lotId) {
+    const lot = medLotState.rows.find(l => l.id === lotId)
+    setDispForm(f => ({
+      ...f,
+      med_lot_id: lotId,
+      purchase_price: lot ? String(lot.purchase_price ?? '') : f.purchase_price,
+      sell_price: lot?.products?.sell_price ? String(lot.products.sell_price) : f.sell_price,
+    }))
+  }
+
   function handleVacLotPick(lotId) {
     const lot = vacLotState.rows.find(l => l.id === lotId)
     setDispForm(f => ({
@@ -350,6 +408,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       setDispForm(f => {
         if (kind === 'meel') return { ...f, meel_supplier_id: created.id, meel_bill_id: '', meel_source: 'new' }
         if (kind === 'vaccine') return { ...f, vac_supplier_id: created.id, vac_lot_id: '', vac_source: 'new' }
+        if (kind === 'medicine') return { ...f, med_supplier_id: created.id, med_lot_id: '', med_source: 'new' }
         return { ...f, choza_supplier_id: created.id, choza_lot_id: '', choza_source: 'new' }
       })
     } else {
@@ -368,6 +427,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     setEditDispatch(null)
     setChozaLotState({ supplierId: null, rows: [] })
     setVacLotState({ supplierId: null, rows: [] })
+    setMedLotState({ supplierId: null, rows: [] })
     setNewSupplier(emptyNewSupplier)
     setNewEntity(emptyNewEntity)
     setStoreCash(true)
@@ -398,7 +458,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       if (type === 'dispatch') {
         if (!dispForm.farm_id) { toast.error('Pick a farm or client'); return }
         // In choza/meel mode the product is derived from the supplier lot or bill.
-        if (!isChoza && !isMeel && !isVaccine && !dispForm.product_id) { toast.error('Pick a product'); return }
+        if (!isChoza && !isMeel && !isVaccine && !isMedicine && !dispForm.product_id) { toast.error('Pick a product'); return }
         const qty = parseFloat(dispForm.quantity) || 0
         const sellPrice = parseFloat(dispForm.sell_price) || 0
         const total = qty * sellPrice
@@ -426,6 +486,47 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
           let vaccineLotId = null
           let supplierDispatchId = null
           let productId = dispForm.product_id
+          let stockPurchaseId = null
+          if (isMedicine) {
+            if (!dispForm.med_supplier_id) { toast.error('Pick a medicine supplier'); return }
+            const buyPrice = parseFloat(dispForm.purchase_price) || 0
+            if (dispForm.med_source === 'new') {
+              const name = (dispForm.med_name === NEW_CHOZA_TYPE ? dispForm.med_name_custom : dispForm.med_name).trim()
+              if (!name) { toast.error('Medicine is required'); return }
+              const bought = parseFloat(dispForm.med_buy_count) || 0
+              if (bought <= 0) { toast.error('Quantity purchased must be > 0'); return }
+              if (buyPrice <= 0) { toast.error('Buy price must be > 0'); return }
+              if (qty > bought) { toast.error('Cannot dispatch more than was purchased'); return }
+              const product = await getOrCreateMedicineProduct(name, buyPrice, dispForm.med_unit)
+              if (!product) { toast.error('Could not create the medicine product'); return }
+              productId = product.id
+              const supplierName = suppliers.find(x => x.id === dispForm.med_supplier_id)?.company_name || null
+              const { data: lot, error: lotErr } = await supabase.from('stock_purchases').insert([{
+                product_id: productId,
+                supplier_id: dispForm.med_supplier_id,
+                supplier: supplierName,
+                quantity: bought,
+                purchase_price: buyPrice,
+                total_cost: bought * buyPrice,
+                purchase_date: dispForm.date,
+                notes: dispForm.notes || null,
+              }]).select().single()
+              if (lotErr) { toast.error(lotErr.message); return }
+              stockPurchaseId = lot.id
+              const { data: prod } = await supabase.from('products').select('quantity').eq('id', productId).single()
+              await supabase.from('products')
+                .update({ quantity: (prod?.quantity || 0) + bought, purchase_price: buyPrice })
+                .eq('id', productId)
+            } else {
+              if (!dispForm.med_lot_id || !selectedMedLot) { toast.error('Pick a medicine purchase'); return }
+              if (qty > selectedMedLot.remaining) {
+                toast.error(`Only ${selectedMedLot.remaining} left on that purchase`)
+                return
+              }
+              productId = selectedMedLot.product_id
+              stockPurchaseId = selectedMedLot.id
+            }
+          }
           if (isVaccine) {
             if (!dispForm.vac_supplier_id) { toast.error('Pick a vaccine supplier'); return }
             const buyPrice = parseFloat(dispForm.purchase_price) || 0
@@ -569,6 +670,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
               purchase_price: parseFloat(dispForm.purchase_price) || 0,
               choza_transaction_id: chozaLotId,
               vaccine_transaction_id: vaccineLotId,
+              stock_purchase_id: stockPurchaseId,
               supplier_dispatch_id: supplierDispatchId,
             }],
           )
@@ -775,6 +877,11 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const isChoza = dispForm.disp_mode === 'choza' && !isEdit
   const isMeel = dispForm.disp_mode === 'meel' && !isEdit
   const isVaccine = dispForm.disp_mode === 'vaccine' && !isEdit
+  const isMedicine = dispForm.disp_mode === 'medicine' && !isEdit
+  const medicineSuppliers = suppliers.filter(s => s.type === 'medicine')
+  const medLots = medLotState.supplierId === dispForm.med_supplier_id ? medLotState.rows : []
+  const selectedMedLot = medLots.find(l => l.id === dispForm.med_lot_id)
+  const knownMedicines = products.filter(p => p.type === 'medicine').map(p => p.name)
   const vaccineSuppliers = suppliers.filter(s => s.type === 'vaccine')
   const vacLots = vacLotState.supplierId === dispForm.vac_supplier_id ? vacLotState.rows : []
   const selectedVacLot = vacLots.find(l => l.id === dispForm.vac_lot_id)
@@ -840,11 +947,12 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
           <div className="space-y-3">
             {/* Choza starts from the supplier, everything else from the product */}
             {!isEdit && (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                 {[
                   { key: 'meel', icon: '🌾', label: 'Meel / دانه', sub: 'pick a bill' },
                   { key: 'choza', icon: '🐥', label: 'Choza / چوزه', sub: 'pick a supplier' },
                   { key: 'vaccine', icon: '💉', label: 'Vaccine / واکسین', sub: 'pick a supplier' },
+                  { key: 'medicine', icon: '💊', label: 'Medicine / دوا', sub: 'pick a supplier' },
                 ].map(m => (
                   <button key={m.key} type="button"
                     onClick={() => setDispForm(f => ({ ...f, disp_mode: m.key, product_id: '', sell_price: '', purchase_price: '' }))}
@@ -1040,6 +1148,124 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                           </div>
                         </div>
                         <p className="text-xs text-slate-500">This bill is added to the supplier’s account (what you owe them).</p>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Medicine: units come out of one supplier purchase */}
+            {isMedicine && (
+              <div className="space-y-3 border border-blue-200 bg-blue-50/60 rounded-xl p-3">
+                <p className="text-xs font-semibold text-blue-800">💊 Medicine supplier / تأمین‌کننده دوا</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Supplier *</label>
+                  <div className="flex gap-2">
+                    <select value={dispForm.med_supplier_id}
+                      onChange={e => setDispForm(f => ({ ...f, med_supplier_id: e.target.value, med_lot_id: '' }))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                      <option value="">— pick a medicine supplier —</option>
+                      {medicineSuppliers.map(x => <option key={x.id} value={x.id}>{x.company_name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => setNewSupplier(x => ({ ...x, open: !x.open }))}
+                      className="px-3 py-2 rounded-lg border-2 border-[#0F5257] text-[#0F5257] text-sm font-semibold whitespace-nowrap">
+                      {newSupplier.open ? 'Cancel' : '＋ New'}
+                    </button>
+                  </div>
+                  {medicineSuppliers.length === 0 && (
+                    <p className="text-xs text-blue-800 mt-1">
+                      No medicine supplier yet — tap <span className="font-semibold">＋ New</span> to add one, then pick the medicine.
+                    </p>
+                  )}
+                </div>
+
+                {newSupplier.open && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                    <input value={newSupplier.company_name} placeholder="Supplier name *"
+                      onChange={e => setNewSupplier(x => ({ ...x, company_name: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <input value={newSupplier.phone} placeholder="Phone"
+                      onChange={e => setNewSupplier(x => ({ ...x, phone: e.target.value }))}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                    <button type="button" disabled={newSupplier.saving} onClick={() => handleCreateSupplier('medicine')}
+                      className="px-3 py-2 rounded-lg bg-[#0F5257] text-white text-sm font-semibold disabled:opacity-50">
+                      {newSupplier.saving ? 'Saving…' : 'Create supplier'}
+                    </button>
+                  </div>
+                )}
+
+                {dispForm.med_supplier_id && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ key: 'existing', label: 'From existing stock' }, { key: 'new', label: 'New purchase' }].map(o => (
+                        <button key={o.key} type="button"
+                          onClick={() => setDispForm(f => ({ ...f, med_source: o.key, med_lot_id: '' }))}
+                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${dispForm.med_source === o.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {dispForm.med_source === 'existing' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Purchase *</label>
+                        <select value={dispForm.med_lot_id} onChange={e => handleMedLotPick(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                          <option value="">— pick a purchase —</option>
+                          {medLots.map(l => (
+                            <option key={l.id} value={l.id}>
+                              {l.products?.name}{l.batch_number ? ` · ${l.batch_number}` : ''} · {l.remaining} left · buy {l.purchase_price}
+                            </option>
+                          ))}
+                        </select>
+                        {medLots.length === 0 && (
+                          <p className="text-xs text-blue-800 mt-1">Nothing left from this supplier — use “New purchase”.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Medicine *</label>
+                          <select value={dispForm.med_name}
+                            onChange={e => setDispForm(f => ({ ...f, med_name: e.target.value, med_name_custom: '' }))}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
+                            <option value="">— pick a medicine —</option>
+                            {knownMedicines.map(n => <option key={n} value={n}>{n}</option>)}
+                            <option value={NEW_CHOZA_TYPE}>＋ New medicine…</option>
+                          </select>
+                        </div>
+                        {dispForm.med_name === NEW_CHOZA_TYPE && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">New medicine name *</label>
+                              <input value={dispForm.med_name_custom}
+                                onChange={e => setDispForm(f => ({ ...f, med_name_custom: e.target.value }))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Unit</label>
+                              <input value={dispForm.med_unit} placeholder="bottle, box, sachet…"
+                                onChange={e => setDispForm(f => ({ ...f, med_unit: e.target.value }))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Quantity purchased *</label>
+                            <input type="number" min="0.01" step="0.01" value={dispForm.med_buy_count}
+                              onChange={e => setDispForm(f => ({ ...f, med_buy_count: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Buy price per unit (AFN) *</label>
+                            <input type="number" min="0" step="0.01" value={dispForm.purchase_price}
+                              onChange={e => setDispForm(f => ({ ...f, purchase_price: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500">This purchase is added to the supplier’s account (what you owe them).</p>
                       </>
                     )}
                   </>
@@ -1280,13 +1506,13 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{isChoza ? 'Chicks to dispatch *' : isMeel ? 'Bags to dispatch *' : isVaccine ? 'Doses to dispatch *' : 'Quantity *'}</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{isChoza ? 'Chicks to dispatch *' : isMeel ? 'Bags to dispatch *' : isVaccine ? 'Doses to dispatch *' : isMedicine ? 'Quantity to dispatch *' : 'Quantity *'}</label>
                 <input required type="number" min="0.01" step="0.01" value={dispForm.quantity}
                   onChange={e => setDispForm(f => ({ ...f, quantity: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{isChoza ? 'Sell price per choza (AFN) *' : isMeel ? 'Sell price per bag (AFN) *' : isVaccine ? 'Sell price per dose (AFN) *' : 'Sell price (AFN) *'}</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{isChoza ? 'Sell price per choza (AFN) *' : isMeel ? 'Sell price per bag (AFN) *' : isVaccine ? 'Sell price per dose (AFN) *' : isMedicine ? 'Sell price per unit (AFN) *' : 'Sell price (AFN) *'}</label>
                 <input required type="number" min="0" step="0.01" value={dispForm.sell_price}
                   onChange={e => setDispForm(f => ({ ...f, sell_price: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30" />
