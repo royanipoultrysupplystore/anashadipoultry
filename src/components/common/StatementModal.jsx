@@ -173,8 +173,10 @@ export default function StatementModal({ open, onClose, kind = 'client', entity,
                     <tr key={i} className="hover:bg-slate-50">
                       <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap" dir="ltr">{formatDate(r.date)}</td>
                       <td className="px-3 py-2.5">
-                        <p className="font-medium text-slate-800">{r.label}</p>
-                        {r.sub && <p className="text-xs text-slate-400">{r.sub}</p>}
+                        <p className="text-xs text-slate-400">{r.label}</p>
+                        {/* The items are what the customer actually wants to read,
+                            so they lead; the row type sits above as a small label. */}
+                        {r.sub && <p className="text-sm font-semibold text-slate-800 mt-0.5">{r.sub}</p>}
                       </td>
                       <td className={`px-3 py-2.5 text-end font-semibold whitespace-nowrap ${cfg.c1.txt}`}>{r.c1 ? formatCurrency(r.c1) : '—'}</td>
                       <td className={`px-3 py-2.5 text-end font-semibold whitespace-nowrap ${cfg.c2.txt}`}>{r.c2 ? formatCurrency(r.c2) : '—'}</td>
