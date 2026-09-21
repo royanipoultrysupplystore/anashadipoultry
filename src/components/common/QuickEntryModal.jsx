@@ -12,7 +12,6 @@ import { usePayments } from '../../hooks/usePayments'
 import { useExpenses } from '../../hooks/useExpenses'
 import { useCashLedger } from '../../hooks/useCashLedger'
 import { useSupplyPayments } from '../../hooks/useSupplyPayments'
-import { useMeelBills } from '../../hooks/useMeelBills'
 import { useSarafs } from '../../hooks/useSarafs'
 import { useStoreCash } from '../../contexts/StoreCashContext'
 import { useLanguage } from '../../contexts/LanguageContext'
@@ -55,7 +54,7 @@ const emptyDisp = {
   date: todayStr(), notes: '',
   choza_supplier_id: '', choza_source: 'existing', choza_lot_id: '', choza_type: '', choza_type_custom: '',
   choza_subtype: '', choza_buy_count: '',
-  meel_supplier_id: '', meel_source: 'existing', meel_bill_id: '',
+  meel_supplier_id: '',
   meel_product_name: '', meel_dana_type: '9_number', meel_bill_number: '', meel_buy_bags: '',
   vac_supplier_id: '', vac_source: 'existing', vac_lot_id: '', vac_name: '', vac_name_custom: '', vac_buy_count: '',
   med_supplier_id: '', med_source: 'existing', med_lot_id: '', med_name: '', med_name_custom: '', med_unit: '', med_buy_count: '',
@@ -152,7 +151,6 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   const { farms, addFarm } = useFarms()
   const { products, addStockPurchase } = useInventory()
   const { suppliers, addSupplier } = useSuppliers()
-  const { meelBills } = useMeelBills()
   const { createDispatch, updateDispatch } = useDispatches()
   const { recordPayment, updatePayment } = usePayments()
   const { addExpense, updateExpense } = useExpenses()
@@ -354,17 +352,6 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
     }))
   }
 
-  // Picking a meel bill carries its product, buy price and sell price into the form.
-  function handleBillPick(billId) {
-    const b = meelBills.find(x => x.id === billId)
-    setDispForm(f => ({
-      ...f,
-      meel_bill_id: billId,
-      purchase_price: b ? String(b.price_per_bag ?? '') : f.purchase_price,
-      sell_price: b ? String(b.sell_price ?? '') : f.sell_price,
-    }))
-  }
-
   // Picking a lot carries its buy price (and suggested sell price) into the form.
   function handleLotPick(lotId) {
     const lot = chozaLots.find(l => l.id === lotId)
@@ -406,7 +393,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
       setNewSupplier(emptyNewSupplier)
       // A brand new supplier has nothing on file yet, so jump to the "new" path.
       setDispForm(f => {
-        if (kind === 'meel') return { ...f, meel_supplier_id: created.id, meel_bill_id: '', meel_source: 'new' }
+        if (kind === 'meel') return { ...f, meel_supplier_id: created.id }
         if (kind === 'vaccine') return { ...f, vac_supplier_id: created.id, vac_lot_id: '', vac_source: 'new' }
         if (kind === 'medicine') return { ...f, med_supplier_id: created.id, med_lot_id: '', med_source: 'new' }
         return { ...f, choza_supplier_id: created.id, choza_lot_id: '', choza_source: 'new' }
@@ -570,10 +557,10 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
             }
           }
           if (isMeel) {
-            // Meel already carries per-bill attribution via supplier_dispatch_id;
-            // the bill decides the product, buy price and remaining bags.
+            // Every meel dispatch writes its own bill: these suppliers never leave
+            // bags on a previous one, so there is nothing to dispatch "out of".
             if (!dispForm.meel_supplier_id) { toast.error('Pick a meel supplier'); return }
-            if (dispForm.meel_source === 'new') {
+            {
               const productName = dispForm.meel_product_name.trim()
               if (!productName) { toast.error('Dana / product name is required'); return }
               const bags = parseFloat(dispForm.meel_buy_bags) || 0
@@ -604,14 +591,6 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
               await supabase.from('products')
                 .update({ quantity: (prod?.quantity || 0) + bags, purchase_price: buyPrice })
                 .eq('id', productId)
-            } else {
-              if (!dispForm.meel_bill_id || !selectedBill) { toast.error('Pick a meel bill'); return }
-              if (qty > selectedBill.available) {
-                toast.error(`Only ${selectedBill.available} bags left on that bill`)
-                return
-              }
-              productId = selectedBill.product_id
-              supplierDispatchId = selectedBill.id
             }
           }
           if (isChoza) {
@@ -894,8 +873,6 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
   // Every meel supplier, not just those with bags left — a new bill can be written here.
   const meelSuppliers = suppliers.filter(s => s.type === 'meel')
     .map(s => ({ id: s.id, name: s.company_name }))
-  const supplierMeelBills = meelBills.filter(b => b.supplier_id === dispForm.meel_supplier_id)
-  const selectedBill = meelBills.find(b => b.id === dispForm.meel_bill_id)
   // Existing choza types, read off the "Choza - <type>" product rows.
   const knownChozaTypes = [...new Set(
     products.filter(p => p.type === 'choza').map(p => p.name.replace(/^\s*Choza\s*-\s*/i, '').trim()).filter(Boolean),
@@ -1046,7 +1023,7 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                   <label className="block text-xs font-medium text-slate-600 mb-1">Supplier *</label>
                   <div className="flex gap-2">
                     <select value={dispForm.meel_supplier_id}
-                      onChange={e => setDispForm(f => ({ ...f, meel_supplier_id: e.target.value, meel_bill_id: '' }))}
+                      onChange={e => setDispForm(f => ({ ...f, meel_supplier_id: e.target.value }))}
                       className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
                       <option value="">— pick a meel supplier —</option>
                       {meelSuppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1073,41 +1050,10 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                   </div>
                 )}
 
+                {/* Every meel dispatch writes its own bill — these suppliers never
+                    leave bags sitting on a previous one. */}
                 {dispForm.meel_supplier_id && (
                   <>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[{ key: 'existing', label: 'From existing bill' }, { key: 'new', label: 'New bill' }].map(o => (
-                        <button key={o.key} type="button"
-                          onClick={() => setDispForm(f => ({ ...f, meel_source: o.key, meel_bill_id: '' }))}
-                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium ${dispForm.meel_source === o.key ? 'border-[#0F5257] bg-[#0F5257] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>
-                          {o.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {dispForm.meel_source === 'existing' ? (
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Bill *</label>
-                        <select value={dispForm.meel_bill_id} onChange={e => handleBillPick(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/30">
-                          <option value="">— pick a bill —</option>
-                          {supplierMeelBills.map(b => (
-                            <option key={b.id} value={b.id}>
-                              {b.product_name}{b.bill_number ? ` · #${b.bill_number}` : ''} · {b.available} bags left · buy {b.price_per_bag}
-                            </option>
-                          ))}
-                        </select>
-                        {supplierMeelBills.length === 0 && (
-                          <p className="text-xs text-lime-800 mt-1">No bill from this supplier has bags left — use “New bill”.</p>
-                        )}
-                        {selectedBill && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Dispatching from this bill leaves {Math.max(0, selectedBill.available - (parseFloat(dispForm.quantity) || 0))} bags on it.
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Dana / product name *</label>
                           <input list="meel-products" value={dispForm.meel_product_name} placeholder="e.g. afghan safi"
@@ -1148,8 +1094,6 @@ export default function QuickEntryModal({ open, onClose, onCreated, editEntry = 
                           </div>
                         </div>
                         <p className="text-xs text-slate-500">This bill is added to the supplier’s account (what you owe them).</p>
-                      </>
-                    )}
                   </>
                 )}
               </div>
