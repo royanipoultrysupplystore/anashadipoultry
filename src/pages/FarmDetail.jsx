@@ -514,14 +514,12 @@ export default function FarmDetail() {
             💬 Balance Reminder
           </button>
         )}
-        {isClient && (
-          <button
+        <button
             onClick={() => setStatementOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-teal-100 text-teal-700 rounded-xl text-sm font-medium hover:bg-teal-200 transition-colors"
           >
             <FileText size={16} /> Statement / د حساب صورت
-          </button>
-        )}
+        </button>
       </div>
 
       {/* Payment reminder timer — clients only */}
@@ -1273,15 +1271,13 @@ export default function FarmDetail() {
         recipient={waPrompt?.recipient}
       />
 
-      {isClient && (
-        <StatementModal
-          open={statementOpen}
-          onClose={() => setStatementOpen(false)}
-          kind="client"
-          entity={{ id, name: lf(farm, 'name', lang) || farm.name, phone: farm.phone }}
-          currentBalance={currentDebt}
-        />
-      )}
+      <StatementModal
+        open={statementOpen}
+        onClose={() => setStatementOpen(false)}
+        kind="client"
+        entity={{ id, name: lf(farm, 'name', lang) || farm.name, phone: farm.phone }}
+        currentBalance={currentDebt}
+      />
 
       {/* Dana Bill Modal (clients) */}
       <Modal open={danaBillModal} onClose={() => { setDanaBillModal(false); setEditDanaBill(null) }} title={editDanaBill ? t('danaBill.edit') : t('danaBill.write')}>

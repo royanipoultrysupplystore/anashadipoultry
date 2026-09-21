@@ -55,8 +55,24 @@ async function fetchRows(kind, id, from, to, lang) {
     })
   }
   if (kind === 'client') {
-    const disp = await between(supabase.from('dispatches').select('total_amount, dispatch_date, notes'), 'dispatch_date')
-    for (const d of disp.data || []) out.push({ date: d.dispatch_date, label: 'Dispatch / ارسال', sub: d.notes || '', c1: parseFloat(d.total_amount) || 0, c2: 0 })
+    // Pull the line items too — a statement that just says "Dispatch" tells the
+    // farm nothing about what they were billed for.
+    const disp = await between(
+      supabase.from('dispatches').select('total_amount, dispatch_date, notes, dispatch_items(quantity, products(name, unit))'),
+      'dispatch_date',
+    )
+    for (const d of disp.data || []) {
+      const items = (d.dispatch_items || [])
+        .map(i => `${i.products?.name || '—'} × ${num(i.quantity)}${i.products?.unit ? ` ${i.products.unit}` : ''}`)
+        .join(' · ')
+      out.push({
+        date: d.dispatch_date,
+        label: 'Dispatch / ارسال',
+        sub: [items, d.notes || ''].filter(Boolean).join(' · '),
+        c1: parseFloat(d.total_amount) || 0,
+        c2: 0,
+      })
+    }
     const pays = await between(supabase.from('payments').select('amount, payment_date, notes, hawala_number, sarafs(name)'), 'payment_date')
     for (const p of pays.data || []) out.push({ date: p.payment_date, label: 'Payment / تادیه', sub: [p.sarafs?.name ? `🔁 ${p.sarafs.name}` : '', p.hawala_number ? `حواله #${p.hawala_number}` : '', p.notes || ''].filter(Boolean).join(' · '), c1: 0, c2: parseFloat(p.amount) || 0 })
   }
@@ -106,7 +122,9 @@ export default function StatementModal({ open, onClose, kind = 'client', entity,
       const isC1 = r.c1 > 0
       const icon = isC1 ? cfg.c1.icon : cfg.c2.icon
       const amt = isC1 ? `+${num(r.c1)}` : `−${num(r.c2)}`
-      return `${formatDate(r.date)}  ${icon} ${r.label}  ${amt}`
+      const head = `${formatDate(r.date)}  ${icon} ${r.label}  ${amt}`
+      // Item detail goes on its own indented line so the message stays readable.
+      return r.sub ? `${head}\n    ${r.sub}` : head
     }).join('\n')
     setWaPrompt({
       templateKey: cfg.template,
