@@ -215,7 +215,9 @@ export default function Dispatches() {
 
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-2">{t('dispatches.items')}</label>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
+              {/* overflow-hidden clipped these columns on a phone with no way to reach
+                  them; scroll instead. */}
+              <div className="border border-slate-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>

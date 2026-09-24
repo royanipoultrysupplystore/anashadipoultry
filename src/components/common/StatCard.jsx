@@ -16,11 +16,14 @@ export default function StatCard({ title, value, icon: Icon, color = 'blue', sub
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">{title}</p>
-          <p className="text-xl sm:text-2xl font-bold text-slate-800 truncate">{value}</p>
+          {/* Never truncate money: two cards per row on a phone is not enough width
+              for a figure like "AFN 334,567", and a cut-off balance is worse than a
+              wrapped one. Slightly smaller on mobile, and allowed to wrap. */}
+          <p className="text-lg sm:text-2xl font-bold text-slate-800 leading-tight wrap-break-word">{value}</p>
           {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
         </div>
         {Icon && (
-          <div className={`p-2.5 rounded-xl ${colors[color]} shrink-0 ml-3`}>
+          <div className={`p-2.5 rounded-xl ${colors[color]} shrink-0 ms-3`}>
             <Icon size={22} />
           </div>
         )}
