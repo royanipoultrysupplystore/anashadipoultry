@@ -44,7 +44,10 @@ export default function Header({ onMenuClick, title }) {
   }
 
   return (
-    <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-4 shadow-sm">
+    // Installed as a PWA the app draws under the phone's status bar (viewport-fit=cover),
+    // so reserve its height on top of the normal padding or the clock and battery sit
+    // on the title and the language switcher.
+    <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-3 sm:px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex items-center gap-2 sm:gap-4 shadow-sm">
       <button
         onClick={onMenuClick}
         className="lg:hidden p-2 -ms-1 rounded-lg hover:bg-slate-100 text-slate-600 shrink-0"

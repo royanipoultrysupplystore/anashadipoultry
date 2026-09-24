@@ -63,7 +63,9 @@ export default function Sidebar({ open, onClose }) {
         .map(s => ({ ...s, items: isAdmin ? s.items : s.items.filter(i => ASSOCIATE_PATHS.has(i.to)) }))
         .filter(s => s.items.length > 0)
 
-  const sideClass = `fixed top-0 ${isRTL ? 'right-0' : 'left-0'} h-full z-30 flex flex-col w-64 bg-gradient-to-b from-[#0C2E31] to-[#06191B] text-white transition-transform duration-300 ease-in-out ${
+  // Same status-bar reserve as the header: the drawer is fixed to top-0, so without
+  // this its logo row renders underneath the phone's clock.
+  const sideClass = `fixed top-0 pt-[env(safe-area-inset-top,0px)] ${isRTL ? 'right-0' : 'left-0'} h-full z-30 flex flex-col w-64 bg-gradient-to-b from-[#0C2E31] to-[#06191B] text-white transition-transform duration-300 ease-in-out ${
     open ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')
   } lg:translate-x-0 lg:static lg:z-auto border-e border-white/5`
 
